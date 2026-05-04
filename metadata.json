@@ -1,0 +1,5 @@
+{
+  "name": "FeedBECK",
+  "description": "Uma rede social para compartilhar e avaliar experiências (laricas, filmes e brisas) enquanto você está chapado.",
+  "requestFramePermissions": ["camera"]
+}

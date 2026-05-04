@@ -1,0 +1,269 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'd.manasterski@avanhandava.org'
+      );
+    }
+
+    function isVerified() {
+      return isSignedIn() && (
+        request.auth.token.get('email_verified', false) == true || 
+        request.auth.token.firebase.get('sign_in_provider', '') == 'anonymous'
+      );
+    }
+
+    function isNotBanned() {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return !profile.keys().hasAll(['banInfo']) || profile.banInfo.isBanned == false || (profile.banInfo.keys().hasAll(['expiresAt']) && profile.banInfo.expiresAt != null && timestamp.value(profile.banInfo.expiresAt) < request.time);
+    }
+
+    function isNotBannedDoc(profile) {
+      return !profile.keys().hasAll(['banInfo']) || profile.banInfo.isBanned == false || (profile.banInfo.keys().hasAll(['expiresAt']) && profile.banInfo.expiresAt != null && timestamp.value(profile.banInfo.expiresAt) < request.time);
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow get: if true;
+      allow list: if isSignedIn(); // Allow searching for users if logged in
+      allow create: if isSignedIn()
+        && isOwner(userId)
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && (incoming().get('uid', userId) == userId)
+        && (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous');
+      allow update: if isSignedIn()
+        && isValidId(userId)
+        && (
+          (isOwner(userId) && (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous') &&
+           (!exists(/databases/$(database)/documents/users/$(userId)) || isNotBannedDoc(existing())) &&
+           incoming().get('uid', userId) == existing().get('uid', userId) && 
+           (incoming().get('handle', '') == existing().get('handle', '') || existing().get('onboardingComplete', false) == false) &&
+           isValidUser(incoming()) &&
+           incoming().diff(existing()).affectedKeys().hasOnly([
+             'handle', 'displayName', 'photoURL', 'bio', 'munchiesCount', 
+             'moviesCount', 'postsCount', 'followersCount', 'followingCount', 'totalSintonias',
+             'avatarStyles', 'tutorial_completed', 'updatedAt', 'isPrivate', 
+             'onboardingComplete', 'email', 'uid', 'unlockedVibes', 'selectedVibe',
+             'redEyesCount', 'showRedEyes', 'rainbowActive', 'yarokActive', 'categoryCounts', 'dominantVibe'
+           ]) && (!incoming().keys().hasAny(['banInfo']) || incoming().get('banInfo', null) == existing().get('banInfo', null)))
+          || (incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'followingCount', 'totalSintonias']) && isSignedIn())
+          || isAdmin()
+        );
+      allow delete: if isOwner(userId) || isAdmin();
+
+        // Social collections
+        match /sintonias/{reviewId} {
+          allow read: if isSignedIn();
+          allow create, delete: if isOwner(userId);
+        }
+        
+        match /synced_reviews/{reviewId} {
+          allow read: if isSignedIn();
+          allow create, delete: if isOwner(userId);
+        }
+
+        match /saved_posts/{reviewId} {
+          allow read, create, delete: if isOwner(userId);
+        }
+      }
+
+    // Admins collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow create: if request.auth.token.email == 'd.manasterski@avanhandava.org' && adminId == request.auth.uid;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['handle', 'displayName'])
+        && (data.get('uid', null) == null || data.uid is string)
+        && (data.get('email', null) == null || data.email is string)
+        && data.handle is string && data.handle.size() <= 35 && data.handle.matches('^@[a-z0-9_]+$')
+        && data.displayName is string && data.displayName.size() <= 40
+        && (data.get('onboardingComplete', false) is bool)
+        && (data.get('bio', '') is string && data.get('bio', '').size() <= 1000)
+        && (data.get('photoURL', '') is string && data.get('photoURL', '').size() <= 1000)
+        && (data.get('isPrivate', false) is bool)
+        && (data.get('avatarStyles', null) == null || data.avatarStyles is map)
+        && (data.get('tutorial_completed', false) is bool)
+        && (data.get('munchiesCount', 0) is number)
+        && (data.get('moviesCount', 0) is number)
+        && (data.get('postsCount', 0) is number)
+        && (data.get('followersCount', 0) is number)
+        && (data.get('followingCount', 0) is number)
+        && (data.get('totalSintonias', 0) is number)
+        && (data.get('updatedAt', null) == null || data.updatedAt is string || data.updatedAt is timestamp)
+        && (data.get('unlockedVibes', null) == null || data.unlockedVibes is list)
+        && (data.get('selectedVibe', null) == null || data.selectedVibe is string)
+        && (data.get('redEyesCount', 0) is number)
+        && (data.get('showRedEyes', true) is bool)
+        && (data.get('rainbowActive', false) is bool)
+        && (data.get('yarokActive', false) is bool)
+        && (data.get('categoryCounts', null) == null || data.categoryCounts is map)
+        && (data.get('dominantVibe', '') is string)
+        && (data.get('banInfo', null) == null || data.banInfo is map)
+        && (data.get('createdAt', null) == null || data.createdAt is string || data.createdAt is timestamp);
+    }
+
+    // Reviews
+    match /reviews/{reviewId} {
+      allow get: if (resource.data.get('isPrivate', false) == false) || (isSignedIn() && (
+        isOwner(resource.data.authorId) ||
+        exists(/databases/$(database)/documents/follows/$(request.auth.uid + "_" + resource.data.authorId))
+      ));
+      allow list: if (resource.data.get('isPrivate', false) == false) || (isSignedIn() && (
+        resource.data.authorId == request.auth.uid ||
+        exists(/databases/$(database)/documents/follows/$(request.auth.uid + "_" + resource.data.authorId))
+      ));
+      allow create: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous')
+        && isValidId(reviewId)
+        && isNotBanned()
+        && isValidReview(incoming())
+        && incoming().authorId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().sintonias == 0
+        && incoming().commentsCount == 0;
+      allow update: if isAdmin() || ((isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous')
+        && isNotBanned()
+        && (
+          // Author can edit content
+          (isOwner(existing().authorId) && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'images', 'rating', 'isPrivate', 'musicData'])) ||
+          // Anyone can update sintonias or commentsCount (sync)
+          (incoming().diff(existing()).affectedKeys().hasOnly(['sintonias', 'commentsCount']))
+        ));
+      allow delete: if isAdmin() || ((isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous') && isOwner(existing().authorId));
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['authorId', 'authorHandle', 'authorName', 'category', 'title', 'content', 'rating', 'images', 'createdAt'])
+        && data.authorId is string
+        && data.authorHandle is string
+        && data.authorName is string
+        && data.category in ['larica', 'filme', 'brisas', 'sons']
+        && data.title is string && data.title.size() <= 500
+        && data.content is string && data.content.size() <= 10000
+        && data.images is list
+        && data.rating is number
+        && (data.get('isPrivate', false) is bool)
+        && (data.get('sintonias', 0) is number)
+        && (data.get('commentsCount', 0) is number)
+        && (data.get('authorPhoto', '') == null || data.get('authorPhoto', '') is string)
+        && (data.get('authorAvatarStyles', null) == null || data.authorAvatarStyles is map)
+        && (data.get('musicData', null) == null || data.musicData is map);
+    }
+
+    // Comments
+    match /reviews/{reviewId}/comments/{commentId} {
+      allow read: if isSignedIn(); // Simplified read for comments
+      allow create: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous')
+        && isValidId(commentId)
+        && isNotBanned()
+        && isValidComment(incoming())
+        && incoming().authorId == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow delete: if isAdmin() || ((isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous') && (isOwner(existing().authorId) || isOwner(get(/databases/$(database)/documents/reviews/$(reviewId)).data.authorId)));
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasAll(['authorId', 'authorHandle', 'text', 'createdAt'])
+        && data.authorId is string
+        && data.authorHandle is string
+        && data.text is string && data.text.size() <= 1000;
+    }
+
+    // Support Tickets
+    match /support_tickets/{ticketId} {
+      allow create: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous')
+        && isValidId(ticketId)
+        && incoming().userId == request.auth.uid
+        && incoming().title is string && incoming().title.size() <= 200
+        && incoming().description is string && incoming().description.size() <= 5000
+        && incoming().status == 'open';
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Follows
+    match /follows/{followId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn(); // Social graph is public for all authenticated brisados
+      allow create: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous') 
+        && isValidId(followId)
+        && isValidFollow(incoming())
+        && (incoming().followerId == request.auth.uid || incoming().followingId == request.auth.uid);
+      allow delete: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous') && (existing().followerId == request.auth.uid || existing().followingId == request.auth.uid);
+    }
+
+    function isValidFollow(data) {
+      return data.keys().hasAll(['followerId', 'followingId', 'createdAt'])
+        && data.followerId is string && isValidId(data.followerId)
+        && data.followingId is string && isValidId(data.followingId)
+        && (data.createdAt == request.time || data.get('createdAt', null) == null);
+    }
+
+    // Reports
+    match /reports/{reportId} {
+      allow create: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous')
+        && isValidId(reportId)
+        && isNotBanned()
+        && isValidReport(incoming())
+        && incoming().reporterId == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time;
+      allow read, update, delete: if isAdmin();
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['id', 'targetId', 'targetUserId', 'targetType', 'reason', 'reporterId', 'status', 'createdAt'])
+        && data.id is string
+        && data.targetId is string
+        && data.targetUserId is string
+        && data.targetType in ['post', 'comment']
+        && data.reason is string && data.reason.size() <= 5000
+        && data.reporterId is string
+        && data.status == 'pending'
+        && (data.get('targetContent', '') is string);
+    }
+
+    // Follow Requests
+    match /followRequests/{requestId} {
+      allow get: if isSignedIn(); // Allow checking for requests if you know the ID
+      allow list: if isSignedIn() && (
+        resource.data.followerId == request.auth.uid || 
+        resource.data.followingId == request.auth.uid
+      );
+      allow create: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous') 
+        && isValidId(requestId)
+        && isValidFollow(incoming())
+        && incoming().followerId == request.auth.uid;
+      allow delete: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous') && (existing().followerId == request.auth.uid || existing().followingId == request.auth.uid);
+    }
+  }
+}

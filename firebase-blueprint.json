@@ -1,0 +1,190 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile information and social stats.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email" },
+        "handle": { "type": "string", "description": "Unique green @handle" },
+        "displayName": { "type": "string" },
+        "onboardingComplete": { "type": "boolean" },
+        "avatarStyles": { "type": "object" },
+        "tutorial_completed": { "type": "boolean" },
+        "photoURL": { "type": "string" },
+        "bio": { "type": "string" },
+        "isPrivate": { "type": "boolean", "description": "Whether the profile is private and requires a follow request" },
+        "munchiesCount": { "type": "number" },
+        "moviesCount": { "type": "number" },
+        "postsCount": { "type": "number" },
+        "followersCount": { "type": "number" },
+        "followingCount": { "type": "number" },
+        "unlockedVibes": { "type": "array", "items": { "type": "string" } },
+        "selectedVibe": { "type": "string" },
+        "redEyesCount": { "type": "number", "description": "Contador manual de sessões" },
+        "showRedEyes": { "type": "boolean", "description": "Controla a visibilidade do contador de sessões no perfil" },
+        "rainbowActive": { "type": "boolean", "description": "Ativa efeito visual de cores no avatar" },
+        "yarokActive": { "type": "boolean", "description": "Ativa o modo visual Yarok Master" },
+        "banInfo": {
+          "type": "object",
+          "properties": {
+            "isBanned": { "type": "boolean" },
+            "reason": { "type": "string" },
+            "expiresAt": { "type": "string", "format": "date-time" },
+            "bannedAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "handle", "displayName"]
+    },
+    "Review": {
+      "title": "Review / Experience",
+      "description": "A review of a munchie, movie, or high experience.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorHandle": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "category": { "type": "string", "enum": ["larica", "filme", "brisas", "sons"] },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "musicData": {
+          "type": "object",
+          "properties": {
+            "trackName": { "type": "string" },
+            "artistName": { "type": "string" },
+            "artworkUrl": { "type": "string" },
+            "previewUrl": { "type": "string" },
+            "trackId": { "type": "number" }
+          }
+        },
+        "rating": { "type": "number" },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "isVideo": { "type": "boolean" },
+        "sintonias": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "authorHandle", "category", "title", "rating"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a review.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorHandle": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["authorId", "authorHandle", "text", "createdAt"]
+    },
+    "Follow": {
+      "title": "Social Connection",
+      "type": "object",
+      "properties": {
+        "followerId": { "type": "string" },
+        "followingId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Admin": {
+      "title": "Administrator",
+      "description": "Authorized administrators for the platform.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "addedAt": { "type": "string", "format": "date-time" },
+        "isMaster": { "type": "boolean" }
+      }
+    },
+    "SavedPost": {
+      "title": "Saved Post",
+      "description": "A post saved by a user to view later.",
+      "type": "object",
+      "properties": {
+        "reviewId": { "type": "string" },
+        "savedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["reviewId", "savedAt"]
+    },
+    "SupportTicket": {
+      "title": "Support Ticket",
+      "description": "User reported problems or feedback.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "closed", "in_progress"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "description", "status", "createdAt"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "User reports for inappropriate content.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "targetId": { "type": "string", "description": "ID of the post or comment being reported" },
+        "targetType": { "type": "string", "enum": ["post", "comment"] },
+        "reason": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "reporterHandle": { "type": "string" },
+        "targetContent": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "resolved", "dismissed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "targetId", "targetType", "reason", "reporterId", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "admins/{adminId}": {
+      "schema": "Admin",
+      "description": "List of platform administrators"
+    },
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Public user profiles"
+    },
+    "reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Public reviews and experiences feed"
+    },
+    "reviews/{reviewId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments nested within a specific review"
+    },
+    "follows/{followId}": {
+      "schema": "Follow",
+      "description": "Social graph connections"
+    },
+    "followRequests/{requestId}": {
+      "schema": "Follow",
+      "description": "Pending follow requests for private profiles"
+    },
+    "users/{userId}/sintonias/{reviewId}": {
+      "schema": { "type": "object", "properties": { "createdAt": { "type": "string" } } },
+      "description": "Likes/Sintonias by a specific user to track interaction state"
+    },
+    "users/{userId}/saved_posts/{reviewId}": {
+      "schema": "SavedPost",
+      "description": "Posts saved by a user"
+    },
+    "support_tickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "Issue reports sent by users for admins to review"
+    },
+    "reports/{reportId}": {
+      "schema": "Report",
+      "description": "Content reports for moderation"
+    }
+  }
+}
