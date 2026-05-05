@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
 import { auth, db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
-import { deleteDoc, doc, updateDoc, arrayUnion, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, updateDoc, arrayUnion, setDoc, getDocs, collection, query, where } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/utils/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { deleteUser, signOut, reauthenticateWithPopup, GoogleAuthProvider } from 'firebase/auth';
@@ -154,17 +154,21 @@ export default function Settings() {
     if (!user) return;
     setSaveLoading(true);
     try {
-      // 1. Attempt to delete Auth Account FIRST (since it's the most likely to fail due to recent login)
-      await deleteUser(user);
-      
-      // 2. Delete Firestore Data (Cleanup usually happens via admin/functions or here if permitted)
-      // Since user is deleted, if Firestore rules used 'isOwner', this might fail if we don't have a token anymore.
-      // However, we still have the 'uid' and we have just deleted the account.
-      // Actually, standard practice is to delete sensitive user-controlled data before auth account.
-      // But we handled the requires-recent-login by re-trying.
+      // 1. Delete user's reviews (posts) first
+      const reviewsQuery = query(collection(db, 'reviews'), where('authorId', '==', user.uid));
+      const reviewsSnap = await getDocs(reviewsQuery);
+      for (const reviewDoc of reviewsSnap.docs) {
+        await deleteDoc(reviewDoc.ref);
+      }
+
+      // 2. Delete Firestore Profile Data while still authenticated
+      // This ensures Firestore rules (isOwner) allow the operation.
       await deleteDoc(doc(db, 'users', user.uid));
       
-      alert('Sua conta foi excluída permanentemente.');
+      // 3. Delete Auth Account
+      await deleteUser(user);
+      
+      alert('Sua conta foi excluída permanentemente. Todos os seus rastros foram apagados.');
       navigate('/login');
     } catch (err: any) {
       console.error('Delete error:', err);

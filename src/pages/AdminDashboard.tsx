@@ -105,6 +105,7 @@ export default function AdminDashboard() {
   const [banReason, setBanReason] = useState('');
   const [banDuration, setBanDuration] = useState('24h');
   const [searchTerm, setSearchTerm] = useState('');
+  const [targetHandle, setTargetHandle] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -231,6 +232,33 @@ export default function AdminDashboard() {
   }, [authUser, isAdmin]);
 
   const [cleanupConfirm, setCleanupConfirm] = useState(false);
+
+  const deleteUserProfileByHandle = async (targetHandle: string) => {
+    const clean = targetHandle.startsWith('@') ? targetHandle : `@${targetHandle}`;
+    addLog(`BUSCANDO HANDLE: ${clean}`);
+    try {
+      const q = query(collection(db, 'users'), where('handle', '==', clean));
+      const snap = await getDocs(q);
+      
+      if (snap.empty) {
+        addLog('HANDLE NÃO ENCONTRADO');
+        alert('Este handle não foi encontrado na base de dados.');
+        return;
+      }
+
+      if (!window.confirm(`Encontrado(s) ${snap.size} perfil(is) com o handle ${clean}. Excluir permanentemente?`)) return;
+
+      for (const d of snap.docs) {
+        await deleteDoc(d.ref);
+        addLog(`EXCLUÍDO: ${d.id.slice(0,8)}`);
+      }
+      
+      alert('Handle(s) removido(s) com sucesso. Agora deve estar livre para uso.');
+      updateCounts();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `users_handle_${targetHandle}`);
+    }
+  };
 
   const handleCleanupAnonymous = async () => {
     setCleanupLoading(true);
@@ -984,6 +1012,27 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="space-y-4">
+                      {/* Deep Search / Manual Handle Deletion */}
+                      <div className="p-4 bg-moss-500/5 rounded-2xl border border-moss-500/10 mb-6">
+                        <h4 className="text-[10px] font-black text-moss-400 uppercase tracking-widest mb-3">Busca profunda por @Handle</h4>
+                        <div className="flex gap-2">
+                          <input 
+                            type="text"
+                            placeholder="Ex: teste"
+                            value={targetHandle}
+                            onChange={(e) => setTargetHandle(e.target.value)}
+                            className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-moss-500/50"
+                          />
+                          <button 
+                            onClick={() => deleteUserProfileByHandle(targetHandle)}
+                            className="px-4 bg-white text-black text-[10px] font-black uppercase rounded-xl hover:bg-moss-400 transition-all"
+                          >
+                            Localizar/Excluir
+                          </button>
+                        </div>
+                        <p className="text-[9px] text-gray-600 mt-2 italic">Use esta ferramenta se um handle parecer travado mesmo após exclusão.</p>
+                      </div>
+
                       {debugLog.length > 0 && (
                         <div className="bg-black/60 border border-moss-500/20 rounded-2xl p-4 space-y-1 font-mono text-[9px]">
                           <p className="text-moss-500 font-black mb-2 flex items-center gap-2">

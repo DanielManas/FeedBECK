@@ -6,7 +6,7 @@ import {
   signInWithPopup, 
   GoogleAuthProvider
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { LogIn, UserPlus, Sparkles, AlertCircle } from 'lucide-react';
@@ -136,6 +136,24 @@ export default function Login() {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
+
+      if (!user.email) {
+        throw new Error('Não foi possível obter seu e-mail do Google.');
+      }
+
+      // Check if this email is already linked to ANOTHER uid in Firestore
+      const emailQuery = query(collection(db, 'users'), where('email', '==', user.email));
+      const emailSnap = await getDocs(emailQuery);
+      
+      const existingDoc = emailSnap.docs.find(d => d.id !== user.uid);
+      if (existingDoc) {
+        // If the email is already in use by another account, we might need to inform the user
+        // However, usually Firebase Auth handles this. But if it doesn't, we block here.
+        setError('Este e-mail já está vinculado a outra conta. Use o método de login original.');
+        await auth.signOut();
+        setLoading(false);
+        return;
+      }
 
       // Ensure minimal profile exists for stats and early tracking
       const userRef = doc(db, 'users', user.uid);
