@@ -147,8 +147,6 @@ export default function Login() {
       
       const existingDoc = emailSnap.docs.find(d => d.id !== user.uid);
       if (existingDoc) {
-        // If the email is already in use by another account, we might need to inform the user
-        // However, usually Firebase Auth handles this. But if it doesn't, we block here.
         setError('Este e-mail já está vinculado a outra conta. Use o método de login original.');
         await auth.signOut();
         setLoading(false);

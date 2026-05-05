@@ -152,6 +152,34 @@ export default function AdminDashboard() {
     }, 3000);
   };
 
+  const deleteUserProfileByHandle = async (targetHandle: string) => {
+    const clean = targetHandle.startsWith('@') ? targetHandle : `@${targetHandle}`;
+    addLog(`BUSCANDO HANDLE: ${clean}`);
+    try {
+      const q = query(collection(db, 'users'), where('handle', '==', clean));
+      const snap = await getDocs(q);
+      
+      if (snap.empty) {
+        addLog('HANDLE NÃO ENCONTRADO');
+        alert('Este handle não foi encontrado na base de dados.');
+        return;
+      }
+
+      const foundCount = snap.size;
+      if (!window.confirm(`Encontrado(s) ${foundCount} perfil(is) com o handle ${clean}. Excluir permanentemente?`)) return;
+
+      for (const d of snap.docs) {
+        await deleteDoc(d.ref);
+        addLog(`EXCLUÍDO: ${d.id.slice(0,8)}`);
+      }
+      
+      alert('Handle(s) removido(s) com sucesso. Agora deve estar livre para uso.');
+      updateCounts();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `users_handle_${targetHandle}`);
+    }
+  };
+
   // 4. Get total counts (only once or periodically)
   const updateCounts = async () => {
     try {
@@ -232,33 +260,6 @@ export default function AdminDashboard() {
   }, [authUser, isAdmin]);
 
   const [cleanupConfirm, setCleanupConfirm] = useState(false);
-
-  const deleteUserProfileByHandle = async (targetHandle: string) => {
-    const clean = targetHandle.startsWith('@') ? targetHandle : `@${targetHandle}`;
-    addLog(`BUSCANDO HANDLE: ${clean}`);
-    try {
-      const q = query(collection(db, 'users'), where('handle', '==', clean));
-      const snap = await getDocs(q);
-      
-      if (snap.empty) {
-        addLog('HANDLE NÃO ENCONTRADO');
-        alert('Este handle não foi encontrado na base de dados.');
-        return;
-      }
-
-      if (!window.confirm(`Encontrado(s) ${snap.size} perfil(is) com o handle ${clean}. Excluir permanentemente?`)) return;
-
-      for (const d of snap.docs) {
-        await deleteDoc(d.ref);
-        addLog(`EXCLUÍDO: ${d.id.slice(0,8)}`);
-      }
-      
-      alert('Handle(s) removido(s) com sucesso. Agora deve estar livre para uso.');
-      updateCounts();
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `users_handle_${targetHandle}`);
-    }
-  };
 
   const handleCleanupAnonymous = async () => {
     setCleanupLoading(true);
@@ -1025,7 +1026,7 @@ export default function AdminDashboard() {
                           />
                           <button 
                             onClick={() => deleteUserProfileByHandle(targetHandle)}
-                            className="px-4 bg-white text-black text-[10px] font-black uppercase rounded-xl hover:bg-moss-400 transition-all"
+                            className="px-4 bg-white text-black text-[10px] font-black uppercase rounded-xl hover:bg-moss-400 transition-all font-bold"
                           >
                             Localizar/Excluir
                           </button>
