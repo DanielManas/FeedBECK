@@ -171,12 +171,17 @@ export default function Login() {
         });
       }
     } catch (err: any) {
+      if (err.code === 'auth/popup-closed-by-user') {
+        // User closed the popup, just stop loading without showing error
+        setLoading(false);
+        return;
+      }
       console.error(err);
       if (err.code === 'auth/operation-not-allowed') {
         setError('O Login com Google está desabilitado no Console do Firebase.');
       } else if (err.code === 'auth/network-request-failed') {
         setError('Erro de conexão com o Google. Verifique sua internet.');
-      } else if (err.code !== 'auth/popup-closed-by-user') {
+      } else {
         setError('Erro ao entrar com Google. Tente novamente.');
       }
     } finally {

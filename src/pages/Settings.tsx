@@ -192,7 +192,11 @@ export default function Settings() {
       await reauthenticateWithPopup(user, provider);
       setReauthRequired(false);
       alert('Identidade confirmada! Agora você pode excluir sua conta.');
-    } catch (err) {
+    } catch (err: any) {
+      if (err.code === 'auth/popup-closed-by-user') {
+        setSaveLoading(false);
+        return;
+      }
       console.error('Re-auth error:', err);
       alert('Erro ao confirmar identidade. Se estiver usando e-mail/senha, por favor saia e entre novamente.');
     } finally {
