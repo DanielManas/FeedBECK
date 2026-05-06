@@ -105,7 +105,8 @@ export default function Login() {
             handle: `@${username.toLowerCase().trim()}`,
             displayName: displayName.trim(),
             createdAt: serverTimestamp(),
-            onboardingComplete: false
+            onboardingComplete: true, // Mark as true so they skip step 1 in App.tsx logic and go directly to tutorial if needed
+            tutorial_completed: false
           });
         } catch (err) {
           handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}`);
@@ -164,7 +165,8 @@ export default function Login() {
           displayName: user.displayName || 'Novo Usuário',
           photoURL: user.photoURL,
           handle: user.email ? `@${user.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '')}` : `@user${user.uid.slice(0,5)}`,
-          onboardingComplete: false,
+          onboardingComplete: true,
+          tutorial_completed: false,
           createdAt: serverTimestamp()
         });
       }
