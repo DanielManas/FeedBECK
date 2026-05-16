@@ -97,20 +97,24 @@ export default function Login() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // Create initial profile so onboarding can skip or use these
-        try {
-          await setDoc(doc(db, 'users', user.uid), {
-            uid: user.uid,
-            email: user.email,
-            handle: `@${username.toLowerCase().trim()}`,
-            displayName: displayName.trim(),
-            createdAt: serverTimestamp(),
-            onboardingComplete: true, // Mark as true so they skip step 1 in App.tsx logic and go directly to tutorial if needed
-            tutorial_completed: false
-          });
-        } catch (err) {
-          handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}`);
-        }
+        await setDoc(doc(db, 'users', user.uid), {
+          uid: user.uid,
+          email: user.email,
+          handle: `@${username.toLowerCase().trim()}`,
+          displayName: displayName.trim(),
+          photoURL: null,
+          bio: '',
+          isPrivate: false,
+          onboardingComplete: true,
+          tutorial_completed: false,
+          followersCount: 0,
+          followingCount: 0,
+          postsCount: 0,
+          munchiesCount: 0,
+          moviesCount: 0,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
       }
     } catch (err: any) {
       console.error(err);
