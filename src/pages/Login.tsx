@@ -7,8 +7,6 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   fetchSignInMethodsForEmail,
-  linkWithCredential,
-  EmailAuthProvider,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
@@ -23,9 +21,10 @@ type Step = 'request_link' | 'check_email' | 'complete_signup';
 const EMAIL_KEY = 'feedbeck_email_for_signin';
 
 function getActionCodeSettings() {
-  // In production this should be your real domain.
-  // Firebase will redirect back here after the user clicks the link.
-  const url = window.location.href.split('#')[0]; // strip hash, keep origin
+  // Firebase redirects the user back to this URL after clicking the link.
+  // We use the origin (e.g. https://feed-beck.vercel.app) so the app loads
+  // at its root and the useEffect can detect the magic link in the full href.
+  const url = `${window.location.origin}/`;
   return {
     url,
     handleCodeInApp: true,
@@ -60,7 +59,21 @@ export default function Login() {
 
   // ── On mount: detect if we were redirected back with a sign-in link ─────────
   useEffect(() => {
-    if (!isSignInWithEmailLink(auth, window.location.href)) return;
+    // Firebase appends query params to the URL (?apiKey=...&oobCode=...)
+    // We check both the full href and a version with the hash stripped
+    const fullHref = window.location.href;
+    const hrefWithoutHash = fullHref.split('#')[0];
+
+    const linkToCheck = isSignInWithEmailLink(auth, fullHref)
+      ? fullHref
+      : isSignInWithEmailLink(auth, hrefWithoutHash)
+      ? hrefWithoutHash
+      : null;
+
+    if (!linkToCheck) return;
+
+    // Store the confirmed link so handleCompleteSignup can use it
+    window.localStorage.setItem('feedbeck_signin_link', linkToCheck);
 
     const savedEmail = window.localStorage.getItem(EMAIL_KEY) ?? '';
     setEmail(savedEmail);
@@ -116,12 +129,15 @@ export default function Login() {
 
     setLoading(true);
     try {
+      // Use the stored link (more reliable than window.location.href after navigation)
+      const signinLink =
+        window.localStorage.getItem('feedbeck_signin_link') ?? window.location.href;
+
       // 1. Sign in with the magic link (proves email ownership)
-      const result = await signInWithEmailLink(auth, emailToUse, window.location.href);
+      const result = await signInWithEmailLink(auth, emailToUse, signinLink);
       const user = result.user;
 
       // 2. Set a real password so the user can log in later with email+password too
-      const credential = EmailAuthProvider.credentialWithLink(emailToUse, window.location.href);
       await updatePassword(user, password);
 
       // 3. Check handle uniqueness
@@ -163,6 +179,7 @@ export default function Login() {
 
       // 5. Clean up localStorage
       window.localStorage.removeItem(EMAIL_KEY);
+      window.localStorage.removeItem('feedbeck_signin_link');
 
       // App will react to onAuthStateChanged → profile loaded → redirect
     } catch (err: any) {
