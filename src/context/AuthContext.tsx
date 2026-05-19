@@ -14,20 +14,16 @@ interface AuthContextType {
   followingIds: string[];
 }
 
-const AuthContext = createContext<AuthContextType>({ 
-  user: null, 
-  loading: true, 
-  profile: null, 
-  isAdmin: false, 
-  auth: null,
-  pendingRequestsCount: 0,
-  followingIds: []
+const AuthContext = createContext<AuthContextType>({
+  user: null, loading: true, profile: null,
+  isAdmin: false, auth: null,
+  pendingRequestsCount: 0, followingIds: [],
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser]       = useState<User | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
@@ -35,12 +31,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Explicitly enforce local persistence (standard Instagram behavior)
-    setPersistence(auth, browserLocalPersistence).catch(err => {
-      console.error("Auth persistence error:", err);
-    });
+    setPersistence(auth, browserLocalPersistence).catch(console.error);
 
     const unsubscribe = onAuthStateChanged(auth, (u) => {
+      // ── KEY GATE ──────────────────────────────────────────────────────────
+      // Google accounts are always verified (emailVerified = true).
+      // Email/password accounts must verify before we treat them as logged-in.
+      // Anonymous users are also let through (for any future guest mode).
+      if (u && !u.emailVerified && !u.isAnonymous) {
+        // User exists in Auth but hasn't verified their email yet.
+        // We keep `user` as null so the app shows the Login screen (awaiting_verification).
+        // The Login component's polling will call reload() and re-trigger this listener
+        // once the user clicks the verification link.
+        setUser(null);
+        setProfile(null);
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+
       setUser(u);
       if (!u) {
         setProfile(null);
@@ -54,34 +63,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsubscribe;
   }, []);
 
-  // Listeners for authenticated user data
+  // Listeners for authenticated + verified user
   useEffect(() => {
     if (!user) return;
 
-    let profileUnsubscribe: (() => void) | null = null;
-    let requestsUnsubscribe: (() => void) | null = null;
-    let followingUnsubscribe: (() => void) | null = null;
+    let profileUnsub: (() => void) | null = null;
+    let requestsUnsub: (() => void) | null = null;
+    let followingUnsub: (() => void) | null = null;
 
-    // Real-time profile listener
-    profileUnsubscribe = onSnapshot(doc(db, 'users', user.uid), async (userSnap) => {
+    // Profile
+    profileUnsub = onSnapshot(doc(db, 'users', user.uid), async (snap) => {
       try {
-        if (userSnap.exists()) {
-          setProfile(userSnap.data());
-        } else {
-          setProfile(null);
-        }
-        
-        // Check admin status
+        setProfile(snap.exists() ? snap.data() : null);
+
+        // Admin check
         if (user.email || !user.isAnonymous) {
           const adminRef = doc(db, 'admins', user.uid);
           const adminSnap = await getDoc(adminRef);
-          
+
           if (user.email === 'd.manasterski@avanhandava.org' && !adminSnap.exists()) {
-            await setDoc(adminRef, {
-              email: user.email,
-              addedAt: serverTimestamp(),
-              isMaster: true
-            });
+            await setDoc(adminRef, { email: user.email, addedAt: serverTimestamp(), isMaster: true });
             setIsAdmin(true);
           } else {
             setIsAdmin(adminSnap.exists());
@@ -90,43 +91,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsAdmin(false);
         }
       } catch (err) {
-        console.error("Error updating profile state:", err);
+        console.error('AuthContext profile error:', err);
       } finally {
         setLoading(false);
       }
     }, (error) => {
-      console.error("Profile onSnapshot error:", error);
-      // We don't call handleFirestoreError here because it throws, 
-      // which can crash the entire Auth provider initialization.
-      // Instead we just set profile to null and allow the app to handle it (e.g. show Onboarding)
+      console.error('Profile snapshot error:', error);
       setProfile(null);
       setLoading(false);
     });
 
-    // Listen to follow requests
-    const requestsQ = query(collection(db, 'followRequests'), where('followingId', '==', user.uid));
-    requestsUnsubscribe = onSnapshot(requestsQ, (snap) => {
-      setPendingRequestsCount(snap.size);
-    }, (error) => {
-      if (auth.currentUser) {
-        handleFirestoreError(error, OperationType.LIST, 'followRequests');
-      }
-    });
+    // Follow requests
+    requestsUnsub = onSnapshot(
+      query(collection(db, 'followRequests'), where('followingId', '==', user.uid)),
+      (snap) => setPendingRequestsCount(snap.size),
+      (error) => { if (auth.currentUser) handleFirestoreError(error, OperationType.LIST, 'followRequests'); }
+    );
 
-    // Listen to following list
-    const followingQ = query(collection(db, 'follows'), where('followerId', '==', user.uid));
-    followingUnsubscribe = onSnapshot(followingQ, (snap) => {
-      setFollowingIds(snap.docs.map(doc => doc.data().followingId));
-    }, (error) => {
-      if (auth.currentUser) {
-        handleFirestoreError(error, OperationType.LIST, 'follows');
-      }
-    });
+    // Following list
+    followingUnsub = onSnapshot(
+      query(collection(db, 'follows'), where('followerId', '==', user.uid)),
+      (snap) => setFollowingIds(snap.docs.map(d => d.data().followingId)),
+      (error) => { if (auth.currentUser) handleFirestoreError(error, OperationType.LIST, 'follows'); }
+    );
 
     return () => {
-      if (profileUnsubscribe) profileUnsubscribe();
-      if (requestsUnsubscribe) requestsUnsubscribe();
-      if (followingUnsubscribe) followingUnsubscribe();
+      if (profileUnsub)  profileUnsub();
+      if (requestsUnsub) requestsUnsub();
+      if (followingUnsub) followingUnsub();
     };
   }, [user]);
 
