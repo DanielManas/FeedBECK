@@ -34,19 +34,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPersistence(auth, browserLocalPersistence).catch(console.error);
 
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      // ── KEY GATE ──────────────────────────────────────────────────────────
-      // Google accounts are always verified (emailVerified = true).
-      // Email/password accounts must verify before we treat them as logged-in.
-      // Anonymous users are also let through (for any future guest mode).
       if (u && !u.emailVerified && !u.isAnonymous) {
-        // User exists in Auth but hasn't verified their email yet.
-        // We keep `user` as null so the app shows the Login screen (awaiting_verification).
-        // The Login component's polling will call reload() and re-trigger this listener
-        // once the user clicks the verification link.
         setUser(null);
         setProfile(null);
         setIsAdmin(false);
         setLoading(false);
+
+        // onAuthStateChanged does NOT re-fire when emailVerified changes.
+        // Poll every 3s and update state directly when the user verifies.
+        const interval = setInterval(async () => {
+          try {
+            await u.reload();
+            const refreshed = auth.currentUser;
+            if (refreshed?.emailVerified) {
+              clearInterval(interval);
+              setUser(refreshed);
+            }
+          } catch { /* network blip */ }
+        }, 3000);
+
         return;
       }
 
