@@ -41,16 +41,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
 
         // onAuthStateChanged does NOT re-fire when emailVerified changes.
-        // Poll every 3s and update state directly when the user verifies.
+        // Poll every 3s and create Firestore profile + update state when verified.
         const interval = setInterval(async () => {
           try {
             await u.reload();
             const refreshed = auth.currentUser;
             if (refreshed?.emailVerified) {
               clearInterval(interval);
+
+              // Create Firestore profile NOW (only after verification)
+              const userRef = doc(db, 'users', refreshed.uid);
+              const userSnap = await getDoc(userRef);
+              if (!userSnap.exists()) {
+                // Retrieve pending profile data saved during registration
+                const pendingRaw = window.localStorage.getItem('feedbeck_pending_profile');
+                const pending = pendingRaw ? JSON.parse(pendingRaw) : null;
+
+                await setDoc(userRef, {
+                  uid: refreshed.uid,
+                  email: refreshed.email,
+                  handle: pending?.handle ?? `@user${refreshed.uid.slice(0, 6)}`,
+                  displayName: pending?.displayName ?? 'Novo Usuário',
+                  photoURL: null,
+                  bio: '',
+                  isPrivate: false,
+                  onboardingComplete: false,
+                  tutorial_completed: false,
+                  followersCount: 0,
+                  followingCount: 0,
+                  postsCount: 0,
+                  munchiesCount: 0,
+                  moviesCount: 0,
+                  categoryCounts: {},
+                  dominantVibe: 'semente',
+                  totalSintonias: 0,
+                  redEyesCount: 0,
+                  showRedEyes: true,
+                  rainbowActive: false,
+                  yarokActive: false,
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                });
+
+                window.localStorage.removeItem('feedbeck_pending_profile');
+              }
+
               setUser(refreshed);
             }
-          } catch { /* network blip */ }
+          } catch (err) {
+            console.error('[AuthContext polling]', err);
+          }
         }, 3000);
 
         return;
