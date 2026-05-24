@@ -10,8 +10,8 @@ import {
   signOut,
 } from 'firebase/auth';
 import {
-  doc, setDoc, getDoc, getDocs,
-  serverTimestamp, collection, query, where,
+  getDocs,
+  collection, query, where,
 } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
@@ -99,21 +99,18 @@ export default function Login() {
       // 2. Create auth account
       const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
 
-      // 3. Send verification email — NO handleCodeInApp (avoids Dynamic Links)
-      await sendEmailVerification(user);
+      // 3. Save pending profile data in localStorage (NOT Firestore yet)
+      // Profile will only be created in Firestore after email is verified.
+      const pendingProfile = {
+        uid: user.uid,
+        email: user.email,
+        handle,
+        displayName: displayName.trim(),
+      };
+      window.localStorage.setItem('feedbeck_pending_profile', JSON.stringify(pendingProfile));
 
-      // 4. Save Firestore profile
-      await setDoc(doc(db, 'users', user.uid), {
-        uid: user.uid, email: user.email, handle,
-        displayName: displayName.trim(), photoURL: null, bio: '',
-        isPrivate: false, onboardingComplete: false, tutorial_completed: false,
-        followersCount: 0, followingCount: 0, postsCount: 0,
-        munchiesCount: 0, moviesCount: 0, categoryCounts: {},
-        dominantVibe: 'semente', totalSintonias: 0,
-        redEyesCount: 0, showRedEyes: true,
-        rainbowActive: false, yarokActive: false,
-        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-      });
+      // 4. Send verification email
+      await sendEmailVerification(user);
 
       // 5. Show waiting screen
       setMode('awaiting_verification');
