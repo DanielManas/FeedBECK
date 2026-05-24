@@ -2194,7 +2194,7 @@ export default function Profile() {
           </div>
         ) : (
           <>
-            <div id="tutorial-profile-posts" className="flex border-t border-white/5 mt-56 sm:mt-8">
+            <div id="tutorial-profile-posts" className="flex border-t border-white/5 mt-8 sm:mt-8">
                <button 
                 onClick={() => setActiveTab('relatos')}
                 className={`flex-1 py-4 flex flex-col items-center gap-1 transition-all ${activeTab === 'relatos' ? 'border-t-2 border-moss-500' : 'opacity-20'}`}

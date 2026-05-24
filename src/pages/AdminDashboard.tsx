@@ -858,27 +858,31 @@ export default function AdminDashboard() {
                 >
                   {filteredUsers.map((u) => (
                     <div key={u.uid} className="bg-white/5 border border-white/5 rounded-[24px] p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-moss-500/20 rounded-full flex items-center justify-center text-moss-400">
-                          <User size={20} />
+                      <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
+                        <div className="w-10 h-10 bg-moss-500/20 rounded-full flex items-center justify-center text-moss-400 shrink-0">
+                           <User size={20} />
                         </div>
-                        <div>
-                          <p className="text-white font-black uppercase tracking-tighter italic text-xs leading-none mb-1 flex items-center gap-2">
-                            {u.displayName}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-white font-black uppercase tracking-tighter italic text-xs leading-none mb-1.5 flex flex-wrap items-center gap-1.5">
+                            <span className="truncate">{u.displayName}</span>
                             {isActuallyBanned(u) && (
-                              <span className="text-[7px] bg-red-500 text-white px-1 py-0.5 rounded shadow-lg animate-pulse">Banido</span>
+                              <span className="text-[7px] bg-red-500 text-white px-1 py-0.5 rounded shadow-lg animate-pulse shrink-0">Banido</span>
                             )}
                             {!u.email && (
-                              <span className="text-[7px] bg-gray-500/50 text-gray-200 px-1 py-0.5 rounded uppercase font-black tracking-widest border border-white/10">Anon</span>
+                              <span className="text-[7px] bg-gray-500/50 text-gray-200 px-1 py-0.5 rounded uppercase font-black tracking-widest border border-white/10 shrink-0">Anon</span>
                             )}
                           </p>
-                          <p className="text-[10px] text-moss-400 font-bold uppercase tracking-widest leading-none flex items-center gap-2">
+                          <p className="text-[10px] text-moss-400 font-bold uppercase tracking-widest leading-none truncate mb-1">
                             {u.handle}
-                            {u.email && <span className="text-[8px] text-gray-700 font-mono tracking-tighter normal-case">({u.email})</span>}
                           </p>
+                          {u.email && (
+                            <p className="text-[8px] text-gray-500 font-mono break-all leading-tight normal-case">
+                              {u.email}
+                            </p>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                          <div className="text-right mr-2 hidden sm:block">
                             <p className="text-[8px] text-gray-600 font-black uppercase leading-none mb-1">Posts</p>
                             <p className="text-xs text-white font-bold">{u.postsCount || 0}</p>
@@ -1016,17 +1020,17 @@ export default function AdminDashboard() {
                       {/* Deep Search / Manual Handle Deletion */}
                       <div className="p-4 bg-moss-500/5 rounded-2xl border border-moss-500/10 mb-6">
                         <h4 className="text-[10px] font-black text-moss-400 uppercase tracking-widest mb-3">Busca profunda por @Handle</h4>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
                           <input 
                             type="text"
                             placeholder="Ex: teste"
                             value={targetHandle}
                             onChange={(e) => setTargetHandle(e.target.value)}
-                            className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-moss-500/50"
+                            className="w-full sm:flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 sm:py-2 text-xs text-white focus:outline-none focus:border-moss-500/50"
                           />
                           <button 
                             onClick={() => deleteUserProfileByHandle(targetHandle)}
-                            className="px-4 bg-white text-black text-[10px] font-black uppercase rounded-xl hover:bg-moss-400 transition-all font-bold"
+                            className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-white text-black text-[10px] font-black uppercase rounded-xl hover:bg-moss-400 transition-all shrink-0"
                           >
                             Localizar/Excluir
                           </button>
