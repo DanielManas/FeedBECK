@@ -10,8 +10,12 @@ import {
   signOut,
 } from 'firebase/auth';
 import {
+  doc,
+  getDoc,
+  setDoc,
   getDocs,
   collection, query, where,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
@@ -83,36 +87,28 @@ export default function Login() {
     e.preventDefault();
     setError(''); setInfo('');
 
-    if (!displayName.trim())              return setErr('Informe seu nome.');
-    if (username.trim().length < 3)       return setErr('Username deve ter ao menos 3 caracteres.');
-    if (!/^[a-z0-9_]+$/.test(username))  return setErr('Username: apenas letras minúsculas, números e _');
     if (password.length < 6)             return setErr('Senha deve ter ao menos 6 caracteres.');
     if (password !== confirmPassword)    return setErr('As senhas não coincidem.');
 
     setLoading(true);
     try {
-      // 1. Handle uniqueness check
-      const handle = `@${username.toLowerCase().trim()}`;
-      const snap = await getDocs(query(collection(db, 'users'), where('handle', '==', handle)));
-      if (!snap.empty) return setErr('Esse @ já está em uso. Escolha outro.');
-
-      // 2. Create auth account
+      // 1. Create auth account
       const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
 
-      // 3. Save pending profile data in localStorage (NOT Firestore yet)
+      // 2. Save pending profile data in localStorage (NOT Firestore yet)
       // Profile will only be created in Firestore after email is verified.
       const pendingProfile = {
         uid: user.uid,
         email: user.email,
-        handle,
-        displayName: displayName.trim(),
+        handle: null,
+        displayName: null,
       };
       window.localStorage.setItem('feedbeck_pending_profile', JSON.stringify(pendingProfile));
 
-      // 4. Send verification email
+      // 3. Send verification email
       await sendEmailVerification(user);
 
-      // 5. Show waiting screen
+      // 4. Show waiting screen
       setMode('awaiting_verification');
       startPolling();
     } catch (err: any) {
@@ -288,18 +284,6 @@ export default function Login() {
               <motion.div key="register" {...slide('right')} className="space-y-5">
                 <Tabs active="register" onSwitch={switchMode} />
                 <form onSubmit={handleRegister} className="space-y-4">
-                  <Field label="Seu Nome">
-                    <input type="text" required value={displayName} onChange={e => setDisplayName(e.target.value)}
-                      placeholder="Como te chamam?" className={inputCls} />
-                  </Field>
-                  <Field label="Username (@)">
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-moss-500/60 font-black text-sm select-none">@</span>
-                      <input type="text" required value={username}
-                        onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                        placeholder="seu_vulgo" className={`${inputCls} pl-10`} />
-                    </div>
-                  </Field>
                   <Field label="E-mail">
                     <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
                       placeholder="voce@exemplo.com" className={inputCls} />
