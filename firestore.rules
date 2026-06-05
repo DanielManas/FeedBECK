@@ -199,6 +199,39 @@ service cloud.firestore {
         && data.text is string && data.text.size() <= 1000;
     }
 
+    // Notifications
+    match /notifications/{notificationId} {
+      allow get: if isSignedIn() && resource.data.get('receiverId', '') == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.get('receiverId', '') == request.auth.uid;
+      allow create: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous')
+        && isValidId(notificationId)
+        && isNotBanned()
+        && isValidNotification(incoming())
+        && incoming().get('senderId', '') == request.auth.uid
+        && incoming().get('createdAt', null) == request.time
+        && incoming().get('read', false) == false;
+      allow update: if isSignedIn()
+        && resource.data.get('receiverId', '') == request.auth.uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['read'])
+        && incoming().get('read', false) is bool;
+      allow delete: if isSignedIn() && resource.data.get('receiverId', '') == request.auth.uid;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['id', 'type', 'senderId', 'senderHandle', 'senderName', 'receiverId', 'reviewId', 'commentId', 'commentText', 'read', 'createdAt'])
+        && data.id is string
+        && data.type in ['reply', 'mention']
+        && data.senderId is string
+        && data.senderHandle is string
+        && data.senderName is string
+        && data.receiverId is string
+        && data.reviewId is string
+        && data.commentId is string
+        && data.commentText is string && data.commentText.size() <= 1000
+        && (data.get('parentCommentText', '') is string && data.get('parentCommentText', '').size() <= 1000)
+        && data.read == false;
+    }
+
     // Support Tickets
     match /support_tickets/{ticketId} {
       allow create: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous')

@@ -233,7 +233,7 @@ export default function AdminDashboard() {
     });
 
     // 2. Load recent users
-    const qUsers = query(collection(db, 'users'), limit(50));
+    const qUsers = query(collection(db, 'users'), orderBy('createdAt', 'desc'), limit(50));
     const unsubUsers = onSnapshot(qUsers, (snap) => {
       setUsers(snap.docs.map(d => ({ ...d.data(), uid: d.id } as UserProfile)));
     });

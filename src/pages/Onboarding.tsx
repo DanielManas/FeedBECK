@@ -189,8 +189,12 @@ export default function Onboarding() {
 
   const validateHandle = async (h: string) => {
     const cleanHandle = h.toLowerCase().trim();
-    if (cleanHandle.length < 3) {
-      setHandleError('Mínimo 3 caracteres');
+    if (cleanHandle.length < 2) {
+      setHandleError('Mínimo 2 caracteres');
+      return false;
+    }
+    if (!/[a-z]/.test(cleanHandle)) {
+      setHandleError('Mínimo 1 letra');
       return false;
     }
     if (!/^[a-z0-9_]+$/.test(cleanHandle)) {

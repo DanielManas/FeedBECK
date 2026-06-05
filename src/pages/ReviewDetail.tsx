@@ -50,6 +50,7 @@ export default function ReviewDetail() {
   const [loading, setLoading] = useState(true);
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState<{ commentId: string; authorHandle: string; authorId: string; text: string } | null>(null);
   const [commentLoading, setCommentLoading] = useState(false);
   const [syncedIds, setSyncedIds] = useState<Set<string>>(new Set());
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
@@ -163,16 +164,50 @@ export default function ReviewDetail() {
     if (!id || !newComment.trim() || !user) return;
     setCommentLoading(true);
     try {
-      await addDoc(collection(db, 'reviews', id, 'comments'), {
+      const commentColl = collection(db, 'reviews', id, 'comments');
+      const newCommentDoc = doc(commentColl);
+      const commentId = newCommentDoc.id;
+
+      const commentData: any = {
         authorId: user.uid,
         userName: profile?.displayName || 'Usuário',
         userHandle: profile?.handle || '@usuario',
+        authorHandle: profile?.handle || '@usuario',
         userAvatarStyles: profile?.avatarStyles || null,
         text: newComment.trim(),
         createdAt: serverTimestamp()
-      });
+      };
+
+      if (replyingTo) {
+        commentData.parentId = replyingTo.commentId;
+        commentData.replyToHandle = replyingTo.authorHandle;
+        commentData.replyToUserId = replyingTo.authorId;
+      }
+
+      await setDoc(newCommentDoc, commentData);
       await updateDoc(doc(db, 'reviews', id), { commentsCount: increment(1) });
+
+      // Create notification if replying to someone else
+      if (replyingTo && replyingTo.authorId !== user.uid) {
+        const notificationRef = doc(collection(db, 'notifications'));
+        await setDoc(notificationRef, {
+          id: notificationRef.id,
+          type: 'reply',
+          senderId: user.uid,
+          senderHandle: profile?.handle || '@usuario',
+          senderName: profile?.displayName || 'Usuário',
+          receiverId: replyingTo.authorId,
+          reviewId: id,
+          commentId: commentId,
+          commentText: newComment.trim(),
+          parentCommentText: replyingTo.text,
+          read: false,
+          createdAt: serverTimestamp()
+        });
+      }
+
       setNewComment('');
+      setReplyingTo(null);
     } catch (err) { } finally {
       setCommentLoading(false);
     }
@@ -292,6 +327,20 @@ export default function ReviewDetail() {
           <h3 className="text-xs font-black uppercase tracking-[0.3em] text-moss-400 px-2">Comentários</h3>
           
           <div className="glass-card p-6 flex flex-col gap-4">
+             {replyingTo && (
+               <div className="bg-moss-500/10 border-l-4 border-moss-500 px-4 py-2 rounded-xl flex justify-between items-center text-xs text-gray-300 transition-all">
+                 <div className="truncate pr-4 flex-1">
+                   <span className="font-bold text-moss-400">Respondendo a {replyingTo.authorHandle}:</span>{" "}
+                   <span className="italic opacity-60">"{replyingTo.text}"</span>
+                 </div>
+                 <button 
+                   onClick={() => setReplyingTo(null)}
+                   className="p-1 text-gray-500 hover:text-white transition-colors"
+                 >
+                   <X size={14} />
+                 </button>
+               </div>
+             )}
              <textarea 
                value={newComment}
                onChange={(e) => setNewComment(e.target.value)}
@@ -322,7 +371,29 @@ export default function ReviewDetail() {
                       <span className="text-[10px] font-black text-moss-400 uppercase tracking-widest">{comment.userHandle}</span>
                       <span className="text-[8px] text-gray-600 font-bold uppercase tracking-tighter">{formatRelativeTime(comment.createdAt)}</span>
                    </div>
+                   {comment.replyToHandle && (
+                     <p className="text-[9px] text-moss-500 font-bold mb-1">
+                       respondendo a <span className="underline">{comment.replyToHandle}</span>
+                     </p>
+                   )}
                    <p className="text-xs text-gray-300 leading-relaxed italic">{comment.text}</p>
+                   {user && (
+                     <div className="flex items-center gap-3 mt-1.5">
+                       <button 
+                         onClick={() => {
+                           setReplyingTo({
+                             commentId: comment.id,
+                             authorHandle: comment.userHandle || '@usuario',
+                             authorId: comment.authorId || comment.userId,
+                             text: comment.text
+                           });
+                         }}
+                         className="text-[9px] font-extrabold uppercase text-moss-500 hover:text-moss-400 cursor-pointer active:scale-95 transition-all"
+                       >
+                         Responder
+                       </button>
+                     </div>
+                   )}
                 </div>
               </motion.div>
             ))}

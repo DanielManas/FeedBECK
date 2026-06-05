@@ -221,6 +221,7 @@ export default function Profile() {
   const [activeCommentsId, setActiveCommentsId] = useState<string | null>(null);
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState<{ commentId: string; authorHandle: string; authorId: string; text: string } | null>(null);
   const [commentLoading, setCommentLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [reportModal, setReportModal] = useState<{ id: string, type: 'post' | 'comment', content: string, targetUserId: string } | null>(null);
@@ -514,7 +515,11 @@ export default function Profile() {
     setCommentLoading(true);
 
     try {
-      const commentData = {
+      const commentColl = collection(db, 'reviews', reviewId, 'comments');
+      const newCommentDoc = doc(commentColl);
+      const commentId = newCommentDoc.id;
+
+      const commentData: any = {
         text: newComment.trim(),
         authorId: user.uid,
         authorHandle: myProfile?.handle || '@usuario',
@@ -524,11 +529,38 @@ export default function Profile() {
         createdAt: serverTimestamp()
       };
 
-      await setDoc(doc(collection(db, 'reviews', reviewId, 'comments')), commentData);
+      if (replyingTo) {
+        commentData.parentId = replyingTo.commentId;
+        commentData.replyToHandle = replyingTo.authorHandle;
+        commentData.replyToUserId = replyingTo.authorId;
+      }
+
+      await setDoc(newCommentDoc, commentData);
       await updateDoc(doc(db, 'reviews', reviewId), {
         commentsCount: increment(1)
       });
+
+      // Create notification if replying to someone else
+      if (replyingTo && replyingTo.authorId !== user.uid) {
+        const notificationRef = doc(collection(db, 'notifications'));
+        await setDoc(notificationRef, {
+          id: notificationRef.id,
+          type: 'reply',
+          senderId: user.uid,
+          senderHandle: myProfile?.handle || '@usuario',
+          senderName: myProfile?.displayName || 'Usuário',
+          receiverId: replyingTo.authorId,
+          reviewId: reviewId,
+          commentId: commentId,
+          commentText: newComment.trim(),
+          parentCommentText: replyingTo.text,
+          read: false,
+          createdAt: serverTimestamp()
+        });
+      }
+
       setNewComment('');
+      setReplyingTo(null);
     } catch (err) {
       console.error('Error adding comment:', err);
     } finally {
@@ -2526,7 +2558,29 @@ export default function Profile() {
                                 </button>
                               )}
                             </div>
+                            {comment.replyToHandle && (
+                              <p className="text-[10px] text-moss-500 font-bold mb-0.5">
+                                respondendo a <span className="underline">{comment.replyToHandle}</span>
+                              </p>
+                            )}
                             <p className="text-sm text-gray-300 leading-relaxed italic">{comment.text}</p>
+                            {user && (
+                              <div className="flex items-center gap-3 mt-1">
+                                <button 
+                                  onClick={() => {
+                                    setReplyingTo({
+                                      commentId: comment.id,
+                                      authorHandle: handleVal,
+                                      authorId: commenterId,
+                                      text: comment.text
+                                    });
+                                  }}
+                                  className="text-[10px] font-extrabold uppercase text-moss-500 hover:text-moss-400 cursor-pointer active:scale-95 transition-all"
+                                >
+                                  Responder
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </motion.div>
                       );
@@ -2536,6 +2590,21 @@ export default function Profile() {
                   )}
                 </AnimatePresence>
               </div>
+
+              {replyingTo && (
+                <div className="bg-moss-500/10 border-l-4 border-moss-500 px-4 py-2 rounded-t-xl flex justify-between items-center text-xs text-gray-300 mb-2 max-w-full">
+                  <div className="truncate pr-4 flex-1">
+                    <span className="font-bold text-moss-400">Respondendo a {replyingTo.authorHandle}:</span>{" "}
+                    <span className="italic opacity-60">"{replyingTo.text}"</span>
+                  </div>
+                  <button 
+                    onClick={() => setReplyingTo(null)}
+                    className="p-1 text-gray-500 hover:text-white transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
 
               <div className="bg-white/5 p-4 rounded-[24px] border border-white/10 flex items-center gap-4 transition-all focus-within:border-moss-500/50">
                 <div className="w-8 h-8 rounded-lg bg-moss-900 border border-white/10 overflow-hidden">

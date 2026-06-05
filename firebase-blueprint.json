@@ -143,6 +143,26 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "targetId", "targetType", "reason", "reporterId", "status", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Activity notifications for replies and mentions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["reply", "mention"] },
+        "senderId": { "type": "string" },
+        "senderHandle": { "type": "string" },
+        "senderName": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "reviewId": { "type": "string" },
+        "commentId": { "type": "string" },
+        "commentText": { "type": "string" },
+        "parentCommentText": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "type", "senderId", "receiverId", "reviewId", "commentId", "commentText", "read", "createdAt"]
     }
   },
   "firestore": {
@@ -161,6 +181,10 @@
     "reviews/{reviewId}/comments/{commentId}": {
       "schema": "Comment",
       "description": "Comments nested within a specific review"
+    },
+    "notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Activity and reply notifications"
     },
     "follows/{followId}": {
       "schema": "Follow",
