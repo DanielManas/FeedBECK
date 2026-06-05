@@ -81,16 +81,23 @@ export default function Notifications() {
 
     const q = query(
       collection(db, 'notifications'),
-      where('receiverId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('receiverId', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snap) => {
       const replyList = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      
+      // Sort client-side to bypass composite index requirement
+      replyList.sort((a, b) => {
+        const timeA = a.createdAt?.seconds || (a.createdAt instanceof Date ? a.createdAt.getTime() / 1000 : 0);
+        const timeB = b.createdAt?.seconds || (b.createdAt instanceof Date ? b.createdAt.getTime() / 1000 : 0);
+        return timeB - timeA;
+      });
+
       setReplies(replyList);
       setRepliesLoading(false);
     }, (error) => {
-      // Create empty collection or ignore list error silently to prevent crash
+      console.error('Error loading comment replies notifications:', error);
       setRepliesLoading(false);
     });
 
@@ -258,16 +265,15 @@ export default function Notifications() {
                           </span>
                         </p>
                         <p className="text-[10px] text-moss-400 font-bold uppercase tracking-wider mt-0.5">
-                          respondeu ao seu comentário • {formatRelativeTime(notif.createdAt)}
+                          respondeu • {formatRelativeTime(notif.createdAt)}
                         </p>
                       </div>
                     </div>
 
                     {notif.parentCommentText && (
-                      <div className="bg-white/2 rounded-2xl p-3 border border-white/5">
-                        <p className="text-[9px] text-gray-500 uppercase tracking-widest font-black leading-tight mb-1">Seu Comentário</p>
-                        <p className="text-xs text-gray-400 italic line-clamp-2">"{notif.parentCommentText}"</p>
-                      </div>
+                      <p className="text-xs text-gray-300 leading-relaxed">
+                        o <span className="font-extrabold text-moss-400">{notif.senderHandle}</span> respondeu o seu comentário: <span className="italic opacity-60 text-gray-400">"{notif.parentCommentText}"</span>
+                      </p>
                     )}
 
                     <div className="bg-moss-500/5 border-l-2 border-moss-500 rounded-r-2xl p-3">

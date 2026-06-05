@@ -147,7 +147,7 @@ function IsqueiroIcon({ aceso, value }: { aceso: boolean, value: number }) {
 
       {/* Notification badge */}
       {value > 0 && (
-        <span className="absolute -top-1 -right-1 z-20 min-w-4.5 h-4.5 px-1 bg-moss-500 rounded-full border border-smog-950 text-[9px] font-black text-white flex items-center justify-center shadow-lg">
+        <span className="absolute -top-1 -right-1 z-20 min-w-4.5 h-4.5 px-1 bg-red-600 rounded-full border border-smog-950 text-[9px] font-black text-white flex items-center justify-center shadow-lg">
           {value}
         </span>
       )}
@@ -694,7 +694,7 @@ export default function Feed() {
     images: ['https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&q=80&w=800']
   } : null;
 
-  // Calculate dynamic notifications for user's Lighter
+  // Calculate dynamic notifications for user's Lighter (only comment replies inside the app)
   const unreadFollowReqsCount = followRequests.length;
   const unreadLikesCount = Math.max(0, (profile?.totalSintonias || 0) - lastViewedSintonias);
 
@@ -711,7 +711,7 @@ export default function Feed() {
   });
   const unreadNewPostsCount = newFollowedPosts.length;
 
-  const notificationCount = unreadFollowReqsCount + unreadLikesCount + unreadNewPostsCount + unreadRepliesCount;
+  const notificationCount = unreadRepliesCount;
   const hasNotifications = notificationCount > 0;
 
   // Handler to put off the lighter / mark as read

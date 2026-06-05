@@ -201,9 +201,9 @@ service cloud.firestore {
 
     // Notifications
     match /notifications/{notificationId} {
-      allow get: if isSignedIn() && resource.data.get('receiverId', '') == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.get('receiverId', '') == request.auth.uid;
-      allow create: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous')
+      allow get: if isSignedIn() && resource.data.receiverId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.receiverId == request.auth.uid;
+      allow create: if isSignedIn()
         && isValidId(notificationId)
         && isNotBanned()
         && isValidNotification(incoming())
@@ -211,10 +211,10 @@ service cloud.firestore {
         && incoming().get('createdAt', null) == request.time
         && incoming().get('read', false) == false;
       allow update: if isSignedIn()
-        && resource.data.get('receiverId', '') == request.auth.uid
+        && resource.data.receiverId == request.auth.uid
         && incoming().diff(existing()).affectedKeys().hasOnly(['read'])
         && incoming().get('read', false) is bool;
-      allow delete: if isSignedIn() && resource.data.get('receiverId', '') == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.receiverId == request.auth.uid;
     }
 
     function isValidNotification(data) {
