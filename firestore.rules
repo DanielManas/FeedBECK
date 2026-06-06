@@ -35,10 +35,7 @@ service cloud.firestore {
     }
 
     function isVerified() {
-      return isSignedIn() && (
-        request.auth.token.get('email_verified', false) == true || 
-        request.auth.token.firebase.get('sign_in_provider', '') == 'anonymous'
-      );
+      return isSignedIn();
     }
 
     function isNotBanned() {

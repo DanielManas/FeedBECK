@@ -46,32 +46,37 @@ const CategoryBadge = ({ category }: { category: any }) => {
 
 // Options for DiceBear Avataaars 9.x - Refined IDs
 const HAIR_STYLES = [
-  { id: 'bigHair', label: 'Big Hair' },
-  { id: 'bob', label: 'Bob' },
-  { id: 'bun', label: 'Bun' },
-  { id: 'curly', label: 'Curly' },
-  { id: 'curvy', label: 'Curvy' },
-  { id: 'dreads', label: 'Dreads' },
-  { id: 'dreads01', label: 'Dreads 01' },
-  { id: 'frida', label: 'Frida' },
-  { id: 'frizzle', label: 'Frizzle' },
-  { id: 'fro', label: 'Fro' },
-  { id: 'hat', label: 'Hat' },
-  { id: 'longButNotTooLong', label: 'Long+' },
-  { id: 'miaWallace', label: 'Mia' },
-  { id: 'shaggy', label: 'Shaggy' },
-  { id: 'shaggyMullet', label: 'Mullet' },
-  { id: 'shortCurly', label: 'Curto Enrolado' },
-  { id: 'shortFlat', label: 'Curto Flat' },
-  { id: 'shortRound', label: 'Curto Redondo' },
-  { id: 'shortHair', label: 'Curto' },
-  { id: 'shortWaved', label: 'Curto Ondulado' },
-  { id: 'sides', label: 'Moicano' },
-  { id: 'straight01', label: 'Liso 01' },
-  { id: 'straight02', label: 'Liso 02' },
-  { id: 'straightAndStrand', label: 'Liso +' },
-  { id: 'theCaesar', label: 'César' },
-  { id: 'careca', label: 'Careca' },
+  // Feminino
+  { id: 'bigHair', label: 'Cabelo Grande', category: 'fem' },
+  { id: 'bob', label: 'Chanel', category: 'fem' },
+  { id: 'bun', label: 'Coque', category: 'fem' },
+  { id: 'curvy', label: 'Ondulado', category: 'fem' },
+  { id: 'frida', label: 'Frida', category: 'fem' },
+  { id: 'longButNotTooLong', label: 'Comprido', category: 'fem' },
+  { id: 'miaWallace', label: 'Mia', category: 'fem' },
+  { id: 'straight01', label: 'Liso 01', category: 'fem' },
+  { id: 'straight02', label: 'Liso 02', category: 'fem' },
+  { id: 'straightAndStrand', label: 'Liso +', category: 'fem' },
+
+  // Neutro
+  { id: 'curly', label: 'Enrolado', category: 'neutro' },
+  { id: 'dreads', label: 'Dreads', category: 'neutro' },
+  { id: 'frizzle', label: 'Frisado', category: 'neutro' },
+  { id: 'fro', label: 'Afro', category: 'neutro' },
+  { id: 'hat', label: 'Chapéu', category: 'neutro' },
+  { id: 'careca', label: 'Careca', category: 'neutro' },
+
+  // Masculino
+  { id: 'dreads01', label: 'Dreads 01', category: 'masc' },
+  { id: 'shaggy', label: 'Franja', category: 'masc' },
+  { id: 'shaggyMullet', label: 'Mullet', category: 'masc' },
+  { id: 'shortCurly', label: 'Curto Enrolado', category: 'masc' },
+  { id: 'shortFlat', label: 'Curto Flat', category: 'masc' },
+  { id: 'shortRound', label: 'Curto Redondo', category: 'masc' },
+  { id: 'theCaesarAndSidePart', label: 'Curto', category: 'masc' },
+  { id: 'shortWaved', label: 'Curto Ondulado', category: 'masc' },
+  { id: 'sides', label: 'Calvo', category: 'masc' },
+  { id: 'theCaesar', label: 'César', category: 'masc' },
 ];
 
 const HAIR_COLORS = [
@@ -95,9 +100,7 @@ const SKIN_COLORS = [
   { id: '614335', color: '#614335', label: 'Ebony' },
   { id: 'ae5d29', color: '#ae5d29', label: 'Marrom' },
   { id: 'd08b5b', color: '#d08b5b', label: 'Bronze' },
-  { id: 'fd9841', color: '#fd9841', label: 'Quente' },
   { id: 'edb98a', color: '#edb98a', label: 'Pêssego' },
-  { id: 'f8d25c', color: '#f8d25c', label: 'Dourado' },
   { id: 'ffdbb4', color: '#ffdbb4', label: 'Claro' },
 ];
 
@@ -107,10 +110,10 @@ const EYES = [
   { id: 'happy', label: 'Feliz' },
   { id: 'hearts', label: 'Coração' },
   { id: 'side', label: 'Lado' },
-  { id: 'squint', label: 'Squint' },
+  { id: 'squint', label: 'Chapado' },
   { id: 'surprised', label: 'Surpreso' },
   { id: 'wink', label: 'Piscada' },
-  { id: 'xdizzy', label: 'Dizzy' },
+  { id: 'xDizzy', label: 'em outras' },
 ];
 
 const MOUTHS = [
@@ -123,16 +126,16 @@ const MOUTHS = [
   { id: 'serious', label: 'Sério' },
   { id: 'smile', label: 'Sorriso' },
   { id: 'tongue', label: 'Língua' },
-  { id: 'twinkle', label: 'Brilho' },
+  { id: 'twinkle', label: 'Feliz' },
 ];
 
 const GLASSES = [
   { id: 'blank', label: 'Nenhum' },
   { id: 'eyepatch', label: 'Tapa Olho' },
   { id: 'kurt', label: 'Kurt' },
-  { id: 'prescription02', label: 'Grau 02' },
+  { id: 'prescription02', label: 'Grau' },
   { id: 'round', label: 'Redondo' },
-  { id: 'wayfarers', label: 'Wayfarers' },
+  { id: 'wayfarers', label: 'Escuros' },
 ];
 
 const FACIAL_HAIR = [
@@ -140,8 +143,8 @@ const FACIAL_HAIR = [
   { id: 'beardLight', label: 'Leve' },
   { id: 'beardMedium', label: 'Média' },
   { id: 'beardMajestic', label: 'Majestosa' },
-  { id: 'moustacheFancy', label: 'Fancy' },
-  { id: 'moustacheMagnum', label: 'Magnum' },
+  { id: 'moustacheFancy', label: 'Bigodera' },
+  { id: 'moustacheMagnum', label: 'Bigodinho' },
 ];
 
 const CLOTHES = [
@@ -679,15 +682,35 @@ export default function Profile() {
       
       if (!syncedIds.has(reviewId)) {
         await setDoc(userLikeRef, { createdAt: serverTimestamp() });
-        await updateDoc(docRef, { sintonias: increment(1) });
+        
+        try {
+          await updateDoc(docRef, { sintonias: increment(1) });
+        } catch (err) {
+          console.error('Error updating review sintonias count:', err);
+        }
+
         if (authorId) {
-          await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(1) });
+          try {
+            await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(1) });
+          } catch (err) {
+            console.error('Error updating profile totalSintonias:', err);
+          }
         }
       } else {
         await deleteDoc(userLikeRef);
-        await updateDoc(docRef, { sintonias: increment(-1) });
+        
+        try {
+          await updateDoc(docRef, { sintonias: increment(-1) });
+        } catch (err) {
+          console.error('Error decrementing review sintonias count:', err);
+        }
+
         if (authorId) {
-          await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(-1) });
+          try {
+            await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(-1) });
+          } catch (err) {
+            console.error('Error decrementing profile totalSintonias:', err);
+          }
         }
       }
     } catch (err) {
@@ -717,6 +740,7 @@ export default function Profile() {
   
   // Customization State (for Me)
   const [isPrivate, setIsPrivate] = useState(false);
+  const [hairCategory, setHairCategory] = useState<'fem' | 'neutro' | 'masc'>('fem');
   const [avatarStyles, setAvatarStyles] = useState({
     top: 'bigHair',
     topColor: '2c1b18',
@@ -1707,7 +1731,7 @@ export default function Profile() {
 
                     {/* Skin Color */}
                     <div className="space-y-4">
-                      <label className="text-[10px] uppercase tracking-[0.4em] font-black text-center block text-gray-500">Pigmentação</label>
+                      <label className="text-[10px] uppercase tracking-[0.4em] font-black text-center block text-gray-500">Cor de pele</label>
                       <div className="flex flex-wrap gap-4 justify-center">
                         {SKIN_COLORS.map((c) => (
                           <button
@@ -1724,9 +1748,28 @@ export default function Profile() {
 
                     {/* Hair Style & Color */}
                     <div className="space-y-6">
-                      <label className="text-[10px] uppercase tracking-[0.4em] font-black text-center block text-gray-500">Fios & Fibras</label>
+                      <label className="text-[10px] uppercase tracking-[0.4em] font-black text-center block text-gray-500">Cabelo</label>
+                      
+                      {/* Hair Category Selector */}
+                      <div className="flex justify-center gap-1.5 p-1 bg-white/5 rounded-2xl max-w-xs mx-auto mb-3 border border-white/5">
+                        {(['fem', 'neutro', 'masc'] as const).map((cat) => (
+                          <button
+                            type="button"
+                            key={cat}
+                            onClick={() => setHairCategory(cat)}
+                            className={`flex-1 py-1.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                              hairCategory === cat 
+                                ? 'bg-moss-500 text-white' 
+                                : 'text-gray-400 hover:text-white'
+                            }`}
+                          >
+                            {cat === 'fem' ? 'Fem' : cat === 'masc' ? 'Masc' : 'Neutro'}
+                          </button>
+                        ))}
+                      </div>
+
                       <div className="grid grid-cols-3 gap-2">
-                        {HAIR_STYLES.map((h) => (
+                        {HAIR_STYLES.filter((h) => h.category === hairCategory).map((h) => (
                           <button
                             key={h.id}
                             onClick={() => setAvatarStyles(prev => ({ ...prev, top: h.id }))}
@@ -1757,7 +1800,7 @@ export default function Profile() {
                        {/* Olhos & Boca */}
                        <div className="grid grid-cols-2 gap-6">
                           <div className="space-y-4">
-                            <label className="text-[10px] uppercase tracking-[0.2em] font-black text-gray-500 block text-center">Olhar</label>
+                            <label className="text-[10px] uppercase tracking-[0.2em] font-black text-gray-500 block text-center">Olhos</label>
                             <div className="grid grid-cols-2 gap-2">
                               {EYES.map((e) => (
                                 <button
@@ -1793,7 +1836,7 @@ export default function Profile() {
                        {/* Barba & Óculos */}
                        <div className="grid grid-cols-2 gap-6">
                             <div className="space-y-4">
-                              <label className="text-[10px] uppercase tracking-[0.2em] font-black text-gray-500 block text-center">Estilo Facial</label>
+                              <label className="text-[10px] uppercase tracking-[0.2em] font-black text-gray-500 block text-center">Barba</label>
                               <div className="grid grid-cols-1 gap-2">
                                 {FACIAL_HAIR.map((f) => (
                                   <button

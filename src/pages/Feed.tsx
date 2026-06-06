@@ -541,18 +541,37 @@ export default function Feed() {
       
       if (!syncedIds.has(reviewId)) {
         // Like (Sintonizar)
-        // Order matters for robustness: track membership first, then increment
         await setDoc(userLikeRef, { createdAt: serverTimestamp() });
-        await updateDoc(docRef, { sintonias: increment(1) });
+        
+        try {
+          await updateDoc(docRef, { sintonias: increment(1) });
+        } catch (err) {
+          console.error('Error updating review sintonias count:', err);
+        }
+
         if (authorId) {
-          await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(1) });
+          try {
+            await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(1) });
+          } catch (err) {
+            console.error('Error updating profile totalSintonias:', err);
+          }
         }
       } else {
         // Unlike (Remover Sintonia)
         await deleteDoc(userLikeRef);
-        await updateDoc(docRef, { sintonias: increment(-1) });
+        
+        try {
+          await updateDoc(docRef, { sintonias: increment(-1) });
+        } catch (err) {
+          console.error('Error decrementing review sintonias count:', err);
+        }
+
         if (authorId) {
-          await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(-1) });
+          try {
+            await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(-1) });
+          } catch (err) {
+            console.error('Error decrementing profile totalSintonias:', err);
+          }
         }
       }
     } catch (err) {

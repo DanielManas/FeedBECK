@@ -29,6 +29,7 @@
     "vite": "^6.2.0"
   },
   "devDependencies": {
+    "@dicebear/avataaars": "^9.4.2",
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
     "@types/node": "^22.14.0"
   }

@@ -138,13 +138,39 @@ export default function ReviewDetail() {
       const userLikeRef = doc(db, 'users', user.uid, 'sintonias', review.id);
       if (!syncedIds.has(review.id)) {
         await setDoc(userLikeRef, { createdAt: serverTimestamp() });
-        await updateDoc(docRef, { sintonias: increment(1) });
+        
+        try {
+          await updateDoc(docRef, { sintonias: increment(1) });
+        } catch (err) {
+          console.error('Error updating review sintonias count:', err);
+        }
+
+        if (review.authorId) {
+          try {
+            await updateDoc(doc(db, 'users', review.authorId), { totalSintonias: increment(1) });
+          } catch (err) {
+            console.error('Error updating profile totalSintonias:', err);
+          }
+        }
       } else {
         await deleteDoc(userLikeRef);
-        await updateDoc(docRef, { sintonias: increment(-1) });
+        
+        try {
+          await updateDoc(docRef, { sintonias: increment(-1) });
+        } catch (err) {
+          console.error('Error decrementing review sintonias count:', err);
+        }
+
+        if (review.authorId) {
+          try {
+            await updateDoc(doc(db, 'users', review.authorId), { totalSintonias: increment(-1) });
+          } catch (err) {
+            console.error('Error decrementing profile totalSintonias:', err);
+          }
+        }
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error toggling sintonia:', err);
     }
   };
 
