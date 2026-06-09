@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import LighterButton from '../components/LighterButton';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/utils/firestore';
 import { 
@@ -778,7 +779,7 @@ export default function Feed() {
                       className="relative p-1.5 rounded-xl hover:bg-white/5 transition-all outline-none flex items-center justify-center"
                       title="Sintonias e Notificações"
                     >
-                      <IsqueiroIcon aceso={hasNotifications} value={notificationCount} />
+                      <LighterButton hasFlame={hasNotifications} count={notificationCount} />
                     </Link>
 
                     <div className="flex flex-col items-center gap-1.5 shrink-0">
