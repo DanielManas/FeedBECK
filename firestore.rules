@@ -217,7 +217,7 @@ service cloud.firestore {
     function isValidNotification(data) {
       return data.keys().hasAll(['id', 'type', 'senderId', 'senderHandle', 'senderName', 'receiverId', 'reviewId', 'commentId', 'commentText', 'read', 'createdAt'])
         && data.id is string
-        && data.type in ['reply', 'mention']
+        && data.type in ['reply', 'mention', 'like_post', 'comment_post', 'follow', 'follow_request', 'follow_accepted']
         && data.senderId is string
         && data.senderHandle is string
         && data.senderName is string
