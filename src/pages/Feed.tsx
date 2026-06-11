@@ -48,7 +48,6 @@ const formatRelativeTime = (date: any) => {
   if (!date) return '...';
   const d = date instanceof Date ? date : date.toDate();
   const distance = formatDistanceToNow(d, { locale: ptBR, addSuffix: false });
-  // Custom shortening for our "tighter" UI
   return distance
     .replace('menos de um minuto', 'agora')
     .replace('cerca de ', '')
@@ -62,99 +61,6 @@ const formatRelativeTime = (date: any) => {
     .replace('dias', 'd')
     .replace('dia', 'd');
 };
-
-function IsqueiroIcon({ aceso, value }: { aceso: boolean, value: number }) {
-  return (
-    <div className="relative cursor-pointer transition-all duration-300 hover:scale-110 active:scale-95 flex flex-col items-center justify-center p-1">
-      {/* Absolute center SVG lighter featuring the line-art lighter structure and conditional flame */}
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="transition-all duration-300"
-      >
-        {/* Animated line-art Neon Green Flame */}
-        <AnimatePresence>
-          {aceso && (
-            <motion.path
-              d="M12 7.2 C 10 7.2, 10 4.8, 12 1.8 C 14 4.8, 14 7.2, 12 7.2 Z"
-              fill="#22c55e"
-              initial={{ scaleY: 0, opacity: 0 }}
-              animate={{
-                scaleY: [1, 1.15, 0.95, 1.05, 1],
-                scaleX: [1, 0.9, 1.05, 0.95, 1],
-                y: [0, -0.6, 0.2, -0.2, 0],
-                opacity: 1
-              }}
-              exit={{ scaleY: 0, opacity: 0 }}
-              transition={{
-                duration: 1.5,
-                repeat: Infinity,
-                ease: "easeInOut"
-              }}
-              style={{ originX: "12px", originY: "7.2px" }}
-              className="drop-shadow-[0_0_5px_rgba(34,197,94,0.7)]"
-            />
-          )}
-        </AnimatePresence>
-
-        {/* Metal windshield upper cap */}
-        <rect 
-          x="9" 
-          y="7" 
-          width="6" 
-          height="5.5" 
-          rx="1" 
-          stroke={aceso ? "#22c55e" : "#94a3b8"} 
-          strokeWidth="1.6" 
-          fill={aceso ? "rgba(34,197,94,0.12)" : "transparent"} 
-          className="transition-colors duration-300"
-        />
-
-        {/* Lighter storage body */}
-        <rect 
-          x="7.5" 
-          y="12.5" 
-          width="9" 
-          height="8.5" 
-          rx="1.5" 
-          stroke={aceso ? "#22c55e" : "#94a3b8"} 
-          strokeWidth="1.6" 
-          fill={aceso ? "rgba(34,197,94,0.04)" : "transparent"} 
-          className="transition-colors duration-300"
-        />
-
-        {/* Spark wheel circle */}
-        <circle 
-          cx="16" 
-          cy="8.5" 
-          r="1" 
-          stroke={aceso ? "#22c55e" : "#94a3b8"} 
-          strokeWidth="1" 
-          className="transition-colors duration-300"
-        />
-
-        {/* Small air hole on windshield */}
-        <circle 
-          cx="12" 
-          cy="9.8" 
-          r="0.6" 
-          fill={aceso ? "#22c55e" : "#94a3b8"} 
-          className="transition-colors duration-300"
-        />
-      </svg>
-
-      {/* Notification badge */}
-      {value > 0 && (
-        <span className="absolute -top-1 -right-1 z-20 min-w-4.5 h-4.5 px-1 bg-red-600 rounded-full border border-smog-950 text-[9px] font-black text-white flex items-center justify-center shadow-lg">
-          {value}
-        </span>
-      )}
-    </div>
-  );
-}
 
 interface Review {
   id: string;
@@ -211,19 +117,8 @@ export default function Feed() {
   const [reportLoading, setReportLoading] = useState(false);
   const [, setTick] = useState(0);
 
-  // Isqueiro / Notifications state
-  const [showLighterModal, setShowLighterModal] = useState(false);
+  // Notifications state
   const [unreadRepliesCount, setUnreadRepliesCount] = useState(0);
-  const [followRequests, setFollowRequests] = useState<any[]>([]);
-  const [followRequestProfiles, setFollowRequestProfiles] = useState<Record<string, any>>({});
-  const [lastViewedSintonias, setLastViewedSintonias] = useState<number>(() => {
-    const saved = localStorage.getItem('feed_last_viewed_sintonias_count');
-    return saved ? parseInt(saved, 10) : 0;
-  });
-  const [lastViewedFeedTime, setLastViewedFeedTime] = useState<number>(() => {
-    const saved = localStorage.getItem('feed_last_viewed_time');
-    return saved ? parseInt(saved, 10) : Date.now();
-  });
 
   // Audio state
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -285,7 +180,6 @@ export default function Feed() {
 
   useEffect(() => {
     if (!user) {
-      // For anonymous users, only show public posts
       const q = query(
         collection(db, 'reviews'), 
         where('isPrivate', '==', false),
@@ -308,11 +202,7 @@ export default function Feed() {
       });
     }
 
-    // For logged in users: public posts OR my posts OR posts from followed accounts
-    // We combine filters using 'or'. 
-    // Note: 'in' is limited to 30 items. If user follows more, we might need a different approach 
-    // but for now we follow the 'in' limit of 30 for followingIds.
-    const limitedFollowingIds = followingIds.slice(0, 28); // Leave room for other filters
+    const limitedFollowingIds = followingIds.slice(0, 28);
     
     let q;
     if (limitedFollowingIds.length > 0) {
@@ -356,7 +246,6 @@ export default function Feed() {
     return unsubscribe;
   }, [user, followingIds]);
 
-  // Fetch current user's liked post IDs to persist 'synced' state
   useEffect(() => {
     if (!user) {
       setSyncedIds(new Set());
@@ -371,7 +260,6 @@ export default function Feed() {
     return unsubscribe;
   }, [user]);
 
-  // Fetch current user's saved post IDs
   useEffect(() => {
     if (!user) {
       setSavedIds(new Set());
@@ -386,30 +274,7 @@ export default function Feed() {
     return unsubscribe;
   }, [user]);
 
-  // Set up initial last viewed sintonias if not exists
-  useEffect(() => {
-    if (profile && !localStorage.getItem('feed_last_viewed_sintonias_count')) {
-      localStorage.setItem('feed_last_viewed_sintonias_count', String(profile.totalSintonias || 0));
-      setLastViewedSintonias(profile.totalSintonias || 0);
-    }
-  }, [profile]);
-
-  // Real-time Follow Requests for Notifications
-  useEffect(() => {
-    if (!user) {
-      setFollowRequests([]);
-      return;
-    }
-    const q = query(collection(db, 'followRequests'), where('followingId', '==', user.uid));
-    const unsubscribe = onSnapshot(q, (snap) => {
-      setFollowRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (error) => {
-      console.error('Error loading follow requests on Feed:', error);
-    });
-    return unsubscribe;
-  }, [user]);
-
-  // Real-time unread reply notifications
+  // Real-time unread notifications
   useEffect(() => {
     if (!user) {
       setUnreadRepliesCount(0);
@@ -431,52 +296,6 @@ export default function Feed() {
     return unsubscribe;
   }, [user]);
 
-  // Load profile details of people requesting to follow
-  useEffect(() => {
-    if (!user || followRequests.length === 0) return;
-    const fetchFollowerProfiles = async () => {
-      try {
-        const followerIds = [...new Set(followRequests.map(r => r.followerId))] as string[];
-        const usersQ = query(collection(db, 'users'), where('__name__', 'in', followerIds));
-        const userSnap = await getDocs(usersQ);
-        const userProfiles: Record<string, any> = {};
-        userSnap.docs.forEach(d => {
-          userProfiles[d.id] = d.data();
-        });
-        setFollowRequestProfiles(prev => ({ ...prev, ...userProfiles }));
-      } catch (err) {
-        console.error('Error loading follower profiles for Feed lighter:', err);
-      }
-    };
-    fetchFollowerProfiles();
-  }, [user, followRequests]);
-
-  const acceptFollowRequest = async (requestId: string, followerId: string) => {
-    if (!user) return;
-    try {
-      const followId = `${followerId}_${user.uid}`;
-      await setDoc(doc(db, 'follows', followId), {
-        followerId,
-        followingId: user.uid,
-        createdAt: serverTimestamp()
-      });
-      
-      await updateDoc(doc(db, 'users', followerId), { followingCount: increment(1) });
-      await updateDoc(doc(db, 'users', user.uid), { followersCount: increment(1) });
-      await deleteDoc(doc(db, 'followRequests', requestId));
-    } catch (err) {
-      console.error('Error accepting follow request from Feed helper:', err);
-    }
-  };
-
-  const rejectFollowRequest = async (requestId: string) => {
-    try {
-      await deleteDoc(doc(db, 'followRequests', requestId));
-    } catch (err) {
-      console.error('Error rejecting follow request from Feed helper:', err);
-    }
-  };
-
   const [commenterUserIds, setCommenterUserIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -494,7 +313,6 @@ export default function Feed() {
       setComments(fetchedComments);
       setCommenterUserIds(fetchedComments.map((c: any) => c.userId || c.authorId).filter(Boolean));
 
-      // Auto-sync comment count if it's incorrect or missing (for legacy posts)
       const currentReview = reviews.find(r => r.id === activeCommentsId);
       if (currentReview && currentReview.commentsCount !== snapshot.size) {
         updateDoc(doc(db, 'reviews', activeCommentsId), {
@@ -541,7 +359,6 @@ export default function Feed() {
       const userLikeRef = doc(db, 'users', user.uid, 'sintonias', reviewId);
       
       if (!syncedIds.has(reviewId)) {
-        // Like (Sintonizar)
         await setDoc(userLikeRef, { createdAt: serverTimestamp() });
         
         try {
@@ -558,7 +375,6 @@ export default function Feed() {
           }
         }
       } else {
-        // Unlike (Remover Sintonia)
         await deleteDoc(userLikeRef);
         
         try {
@@ -631,7 +447,6 @@ export default function Feed() {
         commentsCount: increment(1)
       });
 
-      // Create notification if replying to someone else
       if (replyingTo && replyingTo.authorId !== user.uid) {
         const notificationRef = doc(collection(db, 'notifications'));
         await setDoc(notificationRef, {
@@ -680,10 +495,6 @@ export default function Feed() {
     }
   };
 
-  const filteredReviews = activeFilter === 'todos' 
-    ? reviews 
-    : reviews.filter(r => r.category === activeFilter);
-
   const activeReview = reviews.find(r => r.id === activeCommentsId);
 
   const { isActive: showTutorial } = useTutorial();
@@ -714,44 +525,14 @@ export default function Feed() {
     images: ['https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&q=80&w=800']
   } : null;
 
-  // Calculate dynamic notifications for user's Lighter (only comment replies inside the app)
-  const unreadFollowReqsCount = followRequests.length;
-  const unreadLikesCount = Math.max(0, (profile?.totalSintonias || 0) - lastViewedSintonias);
-
-  const newFollowedPosts = reviews.filter(r => {
-    // Is it from someone we follow (not myself)?
-    const isFollowed = (followingIds || []).includes(r.authorId) && r.authorId !== user?.uid;
-    if (!isFollowed) return false;
-    
-    // Convert post time
-    const postTime = r.createdAt instanceof Date 
-      ? r.createdAt.getTime() 
-      : (r.createdAt?.toDate ? r.createdAt.toDate().getTime() : new Date(r.createdAt || 0).getTime());
-    return postTime > lastViewedFeedTime;
-  });
-  const unreadNewPostsCount = newFollowedPosts.length;
-
   const notificationCount = unreadRepliesCount;
   const hasNotifications = notificationCount > 0;
-
-  // Handler to put off the lighter / mark as read
-  const markAsRead = () => {
-    const nowStr = String(Date.now());
-    const totalSint = String(profile?.totalSintonias || 0);
-
-    localStorage.setItem('feed_last_viewed_time', nowStr);
-    localStorage.setItem('feed_last_viewed_sintonias_count', totalSint);
-
-    setLastViewedFeedTime(Date.now());
-    setLastViewedSintonias(profile?.totalSintonias || 0);
-  };
 
   const displayReviews = showTutorial 
     ? (tutorialPost ? [tutorialPost] : []) 
     : (activeFilter === 'todos' ? reviews : reviews.filter(r => r.category === activeFilter));
 
   const filterOptions = [
-// ... existing filterOptions ...
     { id: 'todos', label: 'Todos' },
     { id: 'larica', label: 'Larica' },
     { id: 'filme', label: 'Filme' },
@@ -915,7 +696,7 @@ export default function Feed() {
                 </div>
               )}
               
-              {/* Image Carousel (Instagram Style) */}
+              {/* Image Carousel */}
               {review.images && review.images.length > 0 && (
                 <div 
                   id={review.id === 'tutorial-post' ? 'tutorial-post-content' : undefined}
@@ -1015,6 +796,7 @@ export default function Feed() {
         )}
       </section>
 
+      {/* Delete Review Modal */}
       <AnimatePresence>
         {isDeleting && (
           <>
@@ -1059,6 +841,7 @@ export default function Feed() {
         )}
       </AnimatePresence>
       
+      {/* Report Modal */}
       <AnimatePresence>
         {reportModal && (
           <>
@@ -1113,6 +896,7 @@ export default function Feed() {
         )}
       </AnimatePresence>
 
+      {/* Comments Modal */}
       <AnimatePresence>
         {activeCommentsId && (
           <>
@@ -1270,191 +1054,6 @@ export default function Feed() {
           </>
         )}
       </AnimatePresence>
-
-      <AnimatePresence>
-        {showLighterModal && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => {
-                setShowLighterModal(false);
-                markAsRead();
-              }}
-              className="fixed inset-0 z-[300] bg-black/85 backdrop-blur-md"
-            />
-            
-            <motion.div 
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed bottom-0 left-0 right-0 z-[310] bg-[#0a0a0a] border-t border-moss-500/20 rounded-t-[40px] max-h-[85vh] flex flex-col shadow-2xl p-6 pb-20 max-w-lg mx-auto"
-            >
-              {/* Header */}
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <Flame className="w-6 h-6 text-orange-500 animate-pulse" />
-                    <span className="absolute inset-0 bg-orange-500/30 blur-md rounded-full -z-10 animate-ping" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-black uppercase tracking-tighter text-white italic">Isqueiro do FeedBECK</h3>
-                    <p className="text-[9px] text-moss-400 uppercase tracking-widest font-bold">Chamas de notificações</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => {
-                    setShowLighterModal(false);
-                    markAsRead();
-                  }}
-                  className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl text-gray-400 hover:text-white transition-all active:scale-95"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Body */}
-              <div className="flex-1 overflow-y-auto pr-1 no-scrollbar space-y-6">
-                
-                {/* 1. Unread Likes (Sintonias) */}
-                {unreadLikesCount > 0 ? (
-                  <motion.div 
-                    initial={{ scale: 0.95, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="p-5 bg-orange-500/10 border border-orange-500/20 rounded-3xl flex items-center gap-4 relative overflow-hidden"
-                  >
-                    <div className="absolute top-0 right-0 -mr-6 -mt-6 w-20 h-20 bg-orange-500/10 rounded-full blur-xl" />
-                    <div className="w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center text-orange-400 shrink-0">
-                      <Flame size={24} className="fill-orange-500/20 animate-bounce" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black uppercase tracking-widest text-orange-400">Novas Sintonias recebidas!</h4>
-                      <p className="text-sm text-gray-200 font-bold mt-1 leading-tight">
-                        Seus relatos receberam <span className="text-orange-400 font-black">{unreadLikesCount}</span> novas sintonias!
-                      </p>
-                      <p className="text-[10px] text-gray-500 mt-2">Sua vibe se espalhou na mente dos outros brisados.</p>
-                    </div>
-                  </motion.div>
-                ) : (
-                  <div className="p-4 bg-white/2 border border-white/5 rounded-3xl opacity-50 flex items-center gap-3">
-                    <Flame size={18} className="text-gray-600 animate-pulse" />
-                    <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Nenhuma nova sintonia nos seus posts</p>
-                  </div>
-                )}
-
-                {/* 2. Follow Requests */}
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-moss-400 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-moss-500" />
-                    Solicitações de Sintonia ({unreadFollowReqsCount})
-                  </h4>
-
-                  {followRequests.length > 0 ? (
-                    <div className="space-y-3 overflow-y-auto max-h-40 no-scrollbar">
-                      {followRequests.map((req) => {
-                        const profileData = followRequestProfiles[req.followerId];
-                        if (!profileData) return null;
-
-                        return (
-                          <motion.div 
-                            key={req.id}
-                            initial={{ x: -10, opacity: 0 }}
-                            animate={{ x: 0, opacity: 1 }}
-                            className="bg-moss-500/5 border border-moss-500/10 rounded-2xl p-3 flex items-center gap-3 justify-between"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                              <UserAvatar 
-                                styles={profileData.avatarStyles} 
-                                seed={profileData.handle} 
-                                size="sm" 
-                                rainbow={profileData.rainbowActive} 
-                              />
-                              <div className="min-w-0">
-                                <p className="text-xs font-black text-white truncate leading-none uppercase">{profileData.displayName}</p>
-                                <p className="text-[9px] text-moss-500 font-bold leading-none mt-1">{profileData.handle}</p>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button 
-                                onClick={() => acceptFollowRequest(req.id, req.followerId)}
-                                className="p-2 bg-moss-500 text-white rounded-lg active:scale-95 transition-all hover:bg-moss-400 animate-pulse"
-                                title="Aceitar"
-                              >
-                                <Check size={14} />
-                              </button>
-                              <button 
-                                onClick={() => rejectFollowRequest(req.id)}
-                                className="p-2 bg-white/5 text-gray-400 rounded-lg active:scale-95 transition-all hover:bg-red-500/20 hover:text-white"
-                                title="Recusar"
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-500 italic py-2">Sua sintonia privada está 100% atualizada.</p>
-                  )}
-                </div>
-
-                {/* 3. New posts from followed accounts */}
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-moss-400 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-moss-500" />
-                    Brisas Recentes das Suas Sintonias ({unreadNewPostsCount})
-                  </h4>
-
-                  {unreadNewPostsCount > 0 ? (
-                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1 no-scrollbar">
-                      {newFollowedPosts.map((post) => (
-                        <div 
-                          key={post.id}
-                          className="bg-white/5 border border-white/5 rounded-2xl p-3 flex items-center justify-between gap-4"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold text-white leading-tight truncate">
-                              <span className="text-moss-400 font-extrabold">{post.userHandle}</span> postou:
-                            </p>
-                            <p className="text-[11px] text-gray-400 truncate mt-0.5 leading-normal italic">
-                              "{post.title}"
-                            </p>
-                          </div>
-                          <span className="text-[8px] text-gray-500 font-black uppercase shrink-0">
-                            {formatRelativeTime(post.createdAt || post.timestamp)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-500 italic py-2">Os brisados que você segue não postaram nada novo recentemente.</p>
-                  )}
-                </div>
-
-              </div>
-
-              {/* Action Buttons */}
-              <div className="mt-8 border-t border-white/5 pt-4 flex flex-col gap-3">
-                <button 
-                  onClick={() => {
-                    markAsRead();
-                    setShowLighterModal(false);
-                  }}
-                  className="w-full bg-[#10b981] hover:bg-emerald-400 text-black text-xs font-black py-4 rounded-2xl uppercase tracking-widest transition-all shadow-lg shadow-emerald-950/20 flex items-center justify-center gap-2"
-                >
-                  🧯 Apagar chama (Marcar como lidas)
-                </button>
-              </div>
-
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
-
