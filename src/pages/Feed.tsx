@@ -465,6 +465,26 @@ export default function Feed() {
         });
       }
 
+      // Notifica o autor do post quando alguém comenta (se não for ele mesmo)
+      const currentReview = reviews.find(r => r.id === activeCommentsId);
+      if (currentReview && currentReview.authorId !== user.uid) {
+        const postNotifRef = doc(collection(db, 'notifications'));
+        await setDoc(postNotifRef, {
+          id: postNotifRef.id,
+          type: 'comment_post',
+          senderId: user.uid,
+          senderHandle: profile?.handle || '@usuario',
+          senderName: profile?.displayName || 'Usuário',
+          receiverId: currentReview.authorId,
+          reviewId: activeCommentsId,
+          commentId: commentId,
+          commentText: newCommentText,
+          parentCommentText: '',
+          read: false,
+          createdAt: serverTimestamp()
+        });
+      }
+
       setNewCommentText('');
       setReplyingTo(null);
     } catch (err) {
