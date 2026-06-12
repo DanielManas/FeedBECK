@@ -417,6 +417,15 @@ export default function Feed() {
 
   const handleAddComment = async () => {
     if (!activeCommentsId || !newCommentText.trim() || !user) return;
+
+    // Captura os valores antes de limpar o estado
+    const textToSend = newCommentText.trim();
+    const replyingToSnapshot = replyingTo;
+    const currentReview = reviews.find(r => r.id === activeCommentsId);
+
+    // Limpa o input imediatamente para dar feedback visual ao usuário
+    setNewCommentText('');
+    setReplyingTo(null);
     setCommentLoading(true);
 
     try {
@@ -431,14 +440,14 @@ export default function Feed() {
         userName: profile?.displayName || 'Usuário',
         userHandle: profile?.handle || '@usuario',
         userAvatarStyles: profile?.avatarStyles || null,
-        text: newCommentText,
+        text: textToSend,
         createdAt: serverTimestamp()
       };
 
-      if (replyingTo) {
-        commentData.parentId = replyingTo.commentId;
-        commentData.replyToHandle = replyingTo.authorHandle;
-        commentData.replyToUserId = replyingTo.authorId;
+      if (replyingToSnapshot) {
+        commentData.parentId = replyingToSnapshot.commentId;
+        commentData.replyToHandle = replyingToSnapshot.authorHandle;
+        commentData.replyToUserId = replyingToSnapshot.authorId;
       }
 
       await setDoc(newCommentDoc, commentData);
@@ -447,48 +456,52 @@ export default function Feed() {
         commentsCount: increment(1)
       });
 
-      if (replyingTo && replyingTo.authorId !== user.uid) {
-        const notificationRef = doc(collection(db, 'notifications'));
-        await setDoc(notificationRef, {
-          id: notificationRef.id,
-          type: 'reply',
-          senderId: user.uid,
-          senderHandle: profile?.handle || '@usuario',
-          senderName: profile?.displayName || 'Usuário',
-          receiverId: replyingTo.authorId,
-          reviewId: activeCommentsId,
-          commentId: commentId,
-          commentText: newCommentText,
-          parentCommentText: replyingTo.text,
-          read: false,
-          createdAt: serverTimestamp()
-        });
+      // Notificações em bloco separado — erro aqui não afeta o comentário já salvo
+      try {
+        if (replyingToSnapshot && replyingToSnapshot.authorId !== user.uid) {
+          const notificationRef = doc(collection(db, 'notifications'));
+          await setDoc(notificationRef, {
+            id: notificationRef.id,
+            type: 'reply',
+            senderId: user.uid,
+            senderHandle: profile?.handle || '@usuario',
+            senderName: profile?.displayName || 'Usuário',
+            receiverId: replyingToSnapshot.authorId,
+            reviewId: activeCommentsId,
+            commentId: commentId,
+            commentText: textToSend,
+            parentCommentText: replyingToSnapshot.text,
+            read: false,
+            createdAt: serverTimestamp()
+          });
+        }
+
+        if (currentReview && currentReview.authorId !== user.uid) {
+          const postNotifRef = doc(collection(db, 'notifications'));
+          await setDoc(postNotifRef, {
+            id: postNotifRef.id,
+            type: 'comment_post',
+            senderId: user.uid,
+            senderHandle: profile?.handle || '@usuario',
+            senderName: profile?.displayName || 'Usuário',
+            receiverId: currentReview.authorId,
+            reviewId: activeCommentsId,
+            commentId: commentId,
+            commentText: textToSend,
+            parentCommentText: '',
+            read: false,
+            createdAt: serverTimestamp()
+          });
+        }
+      } catch (notifErr) {
+        // Falha silenciosa — notificação não crítica
+        console.warn('Notification error (non-critical):', notifErr);
       }
 
-      // Notifica o autor do post quando alguém comenta (se não for ele mesmo)
-      const currentReview = reviews.find(r => r.id === activeCommentsId);
-      if (currentReview && currentReview.authorId !== user.uid) {
-        const postNotifRef = doc(collection(db, 'notifications'));
-        await setDoc(postNotifRef, {
-          id: postNotifRef.id,
-          type: 'comment_post',
-          senderId: user.uid,
-          senderHandle: profile?.handle || '@usuario',
-          senderName: profile?.displayName || 'Usuário',
-          receiverId: currentReview.authorId,
-          reviewId: activeCommentsId,
-          commentId: commentId,
-          commentText: newCommentText,
-          parentCommentText: '',
-          read: false,
-          createdAt: serverTimestamp()
-        });
-      }
-
-      setNewCommentText('');
-      setReplyingTo(null);
     } catch (err) {
       console.error('Error adding comment:', err);
+      // Devolve o texto ao input se o comentário falhou
+      setNewCommentText(textToSend);
     } finally {
       setCommentLoading(false);
     }
