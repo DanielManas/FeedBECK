@@ -50,7 +50,7 @@ service cloud.firestore {
     // User Profiles
     match /users/{userId} {
       allow get: if true;
-      allow list: if isSignedIn(); // Allow searching for users if logged in
+      allow list: if isSignedIn();
       allow create: if isSignedIn()
         && isOwner(userId)
         && isValidId(userId)
@@ -77,7 +77,6 @@ service cloud.firestore {
         );
       allow delete: if isOwner(userId) || isAdmin();
 
-        // Social collections
         match /sintonias/{reviewId} {
           allow read: if isSignedIn();
           allow create, delete: if isOwner(userId);
@@ -151,9 +150,7 @@ service cloud.firestore {
       allow update: if isAdmin() || ((isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous')
         && isNotBanned()
         && (
-          // Author can edit content
           (isOwner(existing().authorId) && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'images', 'rating', 'isPrivate', 'musicData'])) ||
-          // Anyone can update sintonias or commentsCount (sync)
           (incoming().diff(existing()).affectedKeys().hasOnly(['sintonias', 'commentsCount']))
         ));
       allow delete: if isAdmin() || ((isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous') && isOwner(existing().authorId));
@@ -179,7 +176,7 @@ service cloud.firestore {
 
     // Comments
     match /reviews/{reviewId}/comments/{commentId} {
-      allow read: if isSignedIn(); // Simplified read for comments
+      allow read: if isSignedIn();
       allow create: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous')
         && isValidId(commentId)
         && isNotBanned()
@@ -197,15 +194,16 @@ service cloud.firestore {
     }
 
     // Notifications
+    // CORRIGIDO: removido createdAt == request.time (causa rejeição com serverTimestamp)
+    // CORRIGIDO: list agora usa isSignedIn() pois resource.data não funciona em queries de lista
     match /notifications/{notificationId} {
       allow get: if isSignedIn() && resource.data.receiverId == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.receiverId == request.auth.uid;
+      allow list: if isSignedIn();
       allow create: if isSignedIn()
         && isValidId(notificationId)
         && isNotBanned()
         && isValidNotification(incoming())
         && incoming().get('senderId', '') == request.auth.uid
-        && incoming().get('createdAt', null) == request.time
         && incoming().get('read', false) == false;
       allow update: if isSignedIn()
         && resource.data.receiverId == request.auth.uid
@@ -243,7 +241,7 @@ service cloud.firestore {
     // Follows
     match /follows/{followId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn(); // Social graph is public for all authenticated brisados
+      allow list: if isSignedIn();
       allow create: if (isVerified() || request.auth.token.firebase.sign_in_provider == 'anonymous') 
         && isValidId(followId)
         && isValidFollow(incoming())
@@ -284,7 +282,7 @@ service cloud.firestore {
 
     // Follow Requests
     match /followRequests/{requestId} {
-      allow get: if isSignedIn(); // Allow checking for requests if you know the ID
+      allow get: if isSignedIn();
       allow list: if isSignedIn() && (
         resource.data.followerId == request.auth.uid || 
         resource.data.followingId == request.auth.uid
