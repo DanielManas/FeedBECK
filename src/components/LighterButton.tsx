@@ -1,24 +1,17 @@
 import { motion, AnimatePresence } from 'motion/react';
 
 interface LighterButtonProps {
-  /** Exibe chama quando true */
   hasFlame: boolean;
-  /** Número de notificações não lidas */
   count: number;
 }
 
-/**
- * Botão de notificação no formato de isqueiro.
- * Renderiza uma chama animada sobre o isqueiro quando há notificações novas.
- * O componente não gerencia navegação — o elemento pai deve envolvê-lo com <Link>.
- */
 export default function LighterButton({ hasFlame, count }: LighterButtonProps) {
   return (
     <div
       className="relative flex items-center justify-center select-none"
       style={{ width: 34, height: 46 }}
     >
-      {/* ── Chama animada (aparece acima do isqueiro) ── */}
+      {/* Chama animada */}
       <AnimatePresence>
         {hasFlame && (
           <motion.div
@@ -29,7 +22,6 @@ export default function LighterButton({ hasFlame, count }: LighterButtonProps) {
             style={{ originY: '100%', transformOrigin: '50% 100%' }}
             className="absolute top-0 left-1/2 -translate-x-1/2 pointer-events-none"
           >
-            {/* Badge com contagem */}
             {count > 0 && (
               <motion.div
                 initial={{ scale: 0 }}
@@ -42,7 +34,6 @@ export default function LighterButton({ hasFlame, count }: LighterButtonProps) {
               </motion.div>
             )}
 
-            {/* SVG da chama */}
             <motion.svg
               width="16"
               height="18"
@@ -80,7 +71,7 @@ export default function LighterButton({ hasFlame, count }: LighterButtonProps) {
         )}
       </AnimatePresence>
 
-      {/* ── Corpo do isqueiro ── */}
+      {/* Corpo do isqueiro */}
       <svg
         width="28"
         height="30"
@@ -134,8 +125,8 @@ export default function LighterButton({ hasFlame, count }: LighterButtonProps) {
           style={{ transition: 'fill 0.3s' }}
         />
 
-        {/* Roda de faísca */}
-        <ellipse cx="19.5" cy="10.5" rx="3" ry="1.7"
+        {/* Roda de faísca — usando circle em vez de ellipse para evitar ry undefined */}
+        <circle cx="19.5" cy="10.5" r="2"
           fill={hasFlame ? 'rgba(34,197,94,0.14)' : 'rgba(71,85,105,0.12)'}
           stroke={hasFlame ? '#4ade80' : '#475569'}
           strokeWidth="0.9"
@@ -151,7 +142,7 @@ export default function LighterButton({ hasFlame, count }: LighterButtonProps) {
         ))}
       </svg>
 
-      {/* Brilho ambiente verde (apenas quando ativo) */}
+      {/* Brilho ambiente verde */}
       {hasFlame && (
         <motion.div
           animate={{ opacity: [0.08, 0.22, 0.08] }}
