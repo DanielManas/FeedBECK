@@ -495,7 +495,7 @@ export default function Feed() {
         }
       } catch (notifErr) {
         // Falha silenciosa — notificação não crítica
-        console.warn('Notification error (non-critical):', notifErr);
+        console.error('FEEDBECK NOTIF ERROR:', notifErr);
       }
 
     } catch (err) {
