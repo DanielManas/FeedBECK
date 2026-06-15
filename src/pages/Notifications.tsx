@@ -1,8 +1,5 @@
 /**
  * Página de Notificações — FeedBECK
- * Suporta todos os tipos: reply, mention, like_post, comment_post,
- * follow, follow_request, follow_accepted.
- * Apenas in-app, sem push.
  */
 
 import { useState, useEffect } from 'react';
@@ -20,7 +17,7 @@ import { handleFirestoreError, OperationType } from '../lib/utils/firestore';
 import UserAvatar from '../components/UserAvatar';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { NOTIF_ICONS, NOTIF_LABELS, NotificationType } from '../lib/notifications';
+import { NOTIF_ICONS, NotificationType } from '../lib/notifications';
 
 const fmt = (date: any) => {
   if (!date) return '...';
@@ -35,17 +32,42 @@ const fmt = (date: any) => {
     .replace('dias', 'd').replace('dia', 'd');
 };
 
+// Gera o texto da notificação usando os dados do documento
+function getNotifLabel(notif: any): string {
+  const handle = notif.senderHandle || '@usuario';
+  const title = notif.reviewTitle ? `"${notif.reviewTitle}"` : '';
+
+  switch (notif.type as NotificationType) {
+    case 'comment_post':
+      return `${handle} comentou no seu relato ${title}`;
+    case 'reply':
+      return `${handle} respondeu ao seu comentário${title ? ` em ${title}` : ''}`;
+    case 'like_post':
+      return `${handle} sintonizou seu relato ${title}`;
+    case 'mention':
+      return `${handle} te mencionou em um comentário${title ? ` em ${title}` : ''}`;
+    case 'follow':
+      return `${handle} começou a te seguir`;
+    case 'follow_request':
+      return `${handle} quer entrar na sua sintonia`;
+    case 'follow_accepted':
+      return `${handle} aceitou seu pedido de sintonia`;
+    default:
+      return `${handle} interagiu com você`;
+  }
+}
+
 export default function Notifications() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'atividade' | 'pedidos'>('atividade');
 
-  // ── Pedidos de sintonia ──────────────────────────────────────
+  // Pedidos de sintonia
   const [requests, setRequests] = useState<any[]>([]);
   const [reqProfiles, setReqProfiles] = useState<Record<string, any>>({});
   const [reqLoading, setReqLoading] = useState(true);
 
-  // ── Notificações de atividade ────────────────────────────────
+  // Notificações de atividade
   const [notifs, setNotifs] = useState<any[]>([]);
   const [notifsLoading, setNotifsLoading] = useState(true);
 
@@ -69,7 +91,7 @@ export default function Notifications() {
     return unsub;
   }, [user]);
 
-  // Notificações de atividade (todos os tipos exceto follow_request)
+  // Notificações de atividade
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, 'notifications'), where('receiverId', '==', user.uid));
@@ -86,8 +108,7 @@ export default function Notifications() {
     return unsub;
   }, [user]);
 
-  // ── Ações ────────────────────────────────────────────────────
-
+  // Ações
   const acceptRequest = async (requestId: string, followerId: string) => {
     if (!user) return;
     try {
@@ -113,7 +134,6 @@ export default function Notifications() {
       if (!notif.read) {
         await updateDoc(doc(db, 'notifications', notif.id), { read: true });
       }
-      // Navega para o relato se houver reviewId
       if (notif.reviewId) navigate(`/post-view/${notif.reviewId}`);
     } catch (err) { console.error(err); }
   };
@@ -128,30 +148,28 @@ export default function Notifications() {
   const unreadCount = notifs.filter(n => !n.read).length;
   const pendingCount = requests.length;
 
-  // ── Renderização de uma notificação ──────────────────────────
+  // Cores por tipo
+  const accent: Record<string, string> = {
+    like_post:       'border-rose-500/20 bg-rose-500/5',
+    comment_post:    'border-sky-500/20 bg-sky-500/5',
+    reply:           'border-moss-500/15 bg-moss-500/5',
+    mention:         'border-purple-500/20 bg-purple-500/5',
+    follow:          'border-indigo-500/20 bg-indigo-500/5',
+    follow_request:  'border-moss-500/20 bg-moss-500/5',
+    follow_accepted: 'border-emerald-500/20 bg-emerald-500/5',
+  };
+
+  const dotColor: Record<string, string> = {
+    like_post: 'bg-rose-400', comment_post: 'bg-sky-400',
+    reply: 'bg-moss-400', mention: 'bg-purple-400',
+    follow: 'bg-indigo-400', follow_request: 'bg-moss-400',
+    follow_accepted: 'bg-emerald-400',
+  };
 
   const NotifCard = ({ notif }: { notif: any }) => {
     const type: NotificationType = notif.type;
     const icon = NOTIF_ICONS[type] ?? '🔔';
-    const label = NOTIF_LABELS[type]?.(notif.senderHandle, notif.commentText || notif.reviewTitle) ?? `${notif.senderHandle} interagiu`;
-
-    // Cores por tipo
-    const accent: Record<NotificationType, string> = {
-      like_post:       'border-rose-500/20 bg-rose-500/5',
-      comment_post:    'border-sky-500/20 bg-sky-500/5',
-      reply:           'border-moss-500/15 bg-moss-500/5',
-      mention:         'border-purple-500/20 bg-purple-500/5',
-      follow:          'border-indigo-500/20 bg-indigo-500/5',
-      follow_request:  'border-moss-500/20 bg-moss-500/5',
-      follow_accepted: 'border-emerald-500/20 bg-emerald-500/5',
-    };
-
-    const dotColor: Record<NotificationType, string> = {
-      like_post: 'bg-rose-400', comment_post: 'bg-sky-400',
-      reply: 'bg-moss-400', mention: 'bg-purple-400',
-      follow: 'bg-indigo-400', follow_request: 'bg-moss-400',
-      follow_accepted: 'bg-emerald-400',
-    };
+    const label = getNotifLabel(notif);
 
     return (
       <motion.div
@@ -170,10 +188,15 @@ export default function Notifications() {
         )}
 
         <div className="flex items-center gap-3">
-          {/* Emoji icon chip */}
+          {/* Emoji icon */}
           <div className="text-lg shrink-0 w-8 text-center">{icon}</div>
 
-          <UserAvatar seed={notif.senderHandle} size="sm" />
+          {/* Avatar real do sender */}
+          <UserAvatar
+            styles={notif.senderAvatarStyles || null}
+            seed={notif.senderHandle}
+            size="sm"
+          />
 
           <div className="min-w-0 flex-1">
             <p className="text-xs font-black text-white leading-snug">
@@ -266,7 +289,7 @@ export default function Notifications() {
       <main className="px-6 py-6">
         <AnimatePresence mode="wait">
 
-          {/* ── Tab: Atividade ── */}
+          {/* Tab: Atividade */}
           {activeTab === 'atividade' && (
             <motion.div
               key="atividade"
@@ -291,7 +314,7 @@ export default function Notifications() {
             </motion.div>
           )}
 
-          {/* ── Tab: Pedidos de sintonia ── */}
+          {/* Tab: Pedidos de sintonia */}
           {activeTab === 'pedidos' && (
             <motion.div
               key="pedidos"
