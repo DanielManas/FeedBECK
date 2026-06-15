@@ -43,7 +43,7 @@ function getNotifLabel(notif: any): string {
     case 'reply':
       return `${handle} respondeu ao seu comentário${title ? ` em ${title}` : ''}`;
     case 'like_post':
-      return `${handle} sintonizou seu relato ${title}`;
+      return `${handle} curtiu o seu relato ${title}`;
     case 'mention':
       return `${handle} te mencionou em um comentário${title ? ` em ${title}` : ''}`;
     case 'follow':
@@ -210,8 +210,8 @@ export default function Notifications() {
 
         {/* Conteúdo contextual */}
         {(type === 'reply' || type === 'mention' || type === 'comment_post') && notif.commentText && (
-          <div className="border-l-2 border-moss-500 pl-3 ml-11">
-            <p className="text-xs text-gray-300 italic leading-relaxed line-clamp-2">
+          <div className="border-l-2 border-moss-500 pl-3 ml-11 bg-moss-500/5 rounded-r-xl py-1.5 pr-2">
+            <p className="text-xs text-white/90 font-medium leading-relaxed line-clamp-2">
               "{notif.commentText}"
             </p>
           </div>
@@ -219,8 +219,8 @@ export default function Notifications() {
 
         {type === 'reply' && notif.parentCommentText && (
           <div className="ml-11">
-            <p className="text-[9px] text-gray-500 italic">
-              em resposta ao seu: <span className="opacity-60">"{notif.parentCommentText}"</span>
+            <p className="text-[9px] text-gray-400 italic">
+              em resposta ao seu: <span className="text-white/50">"{notif.parentCommentText}"</span>
             </p>
           </div>
         )}
