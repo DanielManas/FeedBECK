@@ -210,7 +210,7 @@ export default function Notifications() {
 
         {/* Conteúdo contextual */}
         {(type === 'reply' || type === 'mention' || type === 'comment_post') && notif.commentText && (
-          <div className="border-l-2 border-moss-500 pl-3 ml-11 bg-moss-500/5 rounded-r-xl py-1.5 pr-2">
+          <div className="border-l-2 border-moss-500 pl-3 ml-11">
             <p className="text-xs text-white/90 font-medium leading-relaxed line-clamp-2">
               "{notif.commentText}"
             </p>
