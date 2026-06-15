@@ -374,6 +374,32 @@ export default function Feed() {
             console.error('Error updating profile totalSintonias:', err);
           }
         }
+
+        // Notificação de like_post
+        if (authorId && authorId !== user.uid) {
+          try {
+            const likedReview = reviews.find(r => r.id === reviewId);
+            const likeNotifRef = doc(collection(db, 'notifications'));
+            await setDoc(likeNotifRef, {
+              id: likeNotifRef.id,
+              type: 'like_post',
+              senderId: user.uid,
+              senderHandle: profile?.handle || '@usuario',
+              senderName: profile?.displayName || 'Usuário',
+              senderAvatarStyles: profile?.avatarStyles || null,
+              receiverId: authorId,
+              reviewId: reviewId,
+              reviewTitle: likedReview?.title || '',
+              commentId: '',
+              commentText: '',
+              parentCommentText: '',
+              read: false,
+              createdAt: serverTimestamp()
+            });
+          } catch (likeNotifErr) {
+            console.warn('Like notification error:', likeNotifErr);
+          }
+        }
       } else {
         await deleteDoc(userLikeRef);
         
@@ -458,6 +484,13 @@ export default function Feed() {
 
       // Notificações em bloco separado — erro aqui não afeta o comentário já salvo
       try {
+        const senderAvatarStyles = profile?.avatarStyles || null;
+        const reviewTitle = currentReview?.title || '';
+
+        // Detectar menções (@handle) no texto
+        const mentionMatches = textToSend.match(/@[a-z0-9_]+/g) || [];
+
+        // Notificação de reply (resposta a comentário)
         if (replyingToSnapshot && replyingToSnapshot.authorId !== user.uid) {
           const notificationRef = doc(collection(db, 'notifications'));
           await setDoc(notificationRef, {
@@ -466,8 +499,10 @@ export default function Feed() {
             senderId: user.uid,
             senderHandle: profile?.handle || '@usuario',
             senderName: profile?.displayName || 'Usuário',
+            senderAvatarStyles,
             receiverId: replyingToSnapshot.authorId,
             reviewId: activeCommentsId,
+            reviewTitle,
             commentId: commentId,
             commentText: textToSend,
             parentCommentText: replyingToSnapshot.text,
@@ -476,6 +511,7 @@ export default function Feed() {
           });
         }
 
+        // Notificação de comentário no post
         if (currentReview && currentReview.authorId !== user.uid) {
           const postNotifRef = doc(collection(db, 'notifications'));
           await setDoc(postNotifRef, {
@@ -484,8 +520,10 @@ export default function Feed() {
             senderId: user.uid,
             senderHandle: profile?.handle || '@usuario',
             senderName: profile?.displayName || 'Usuário',
+            senderAvatarStyles,
             receiverId: currentReview.authorId,
             reviewId: activeCommentsId,
+            reviewTitle,
             commentId: commentId,
             commentText: textToSend,
             parentCommentText: '',
@@ -493,8 +531,44 @@ export default function Feed() {
             createdAt: serverTimestamp()
           });
         }
+
+        // Notificações de menção (@handle no texto)
+        if (mentionMatches.length > 0) {
+          const mentionedHandles = [...new Set(mentionMatches)];
+          for (const mentionHandle of mentionedHandles) {
+            // Busca o usuário mencionado para obter seu ID
+            try {
+              const { getDocs: gd, query: q2, collection: col2, where: wh } = await import('firebase/firestore');
+              const mentionQ = q2(col2(db, 'users'), wh('handle', '==', mentionHandle));
+              const mentionSnap = await gd(mentionQ);
+              if (!mentionSnap.empty) {
+                const mentionedUser = mentionSnap.docs[0].data();
+                if (mentionedUser.uid !== user.uid) {
+                  const mentionRef = doc(collection(db, 'notifications'));
+                  await setDoc(mentionRef, {
+                    id: mentionRef.id,
+                    type: 'mention',
+                    senderId: user.uid,
+                    senderHandle: profile?.handle || '@usuario',
+                    senderName: profile?.displayName || 'Usuário',
+                    senderAvatarStyles,
+                    receiverId: mentionedUser.uid,
+                    reviewId: activeCommentsId,
+                    reviewTitle,
+                    commentId: commentId,
+                    commentText: textToSend,
+                    parentCommentText: '',
+                    read: false,
+                    createdAt: serverTimestamp()
+                  });
+                }
+              }
+            } catch (mentionErr) {
+              console.warn('Mention lookup error:', mentionErr);
+            }
+          }
+        }
       } catch (notifErr) {
-        // Falha silenciosa — notificação não crítica
         console.error('FEEDBECK NOTIF ERROR:', notifErr);
       }
 
