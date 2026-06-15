@@ -541,9 +541,8 @@ export default function Feed() {
           for (const mentionHandle of mentionedHandles) {
             // Busca o usuário mencionado para obter seu ID
             try {
-              const { getDocs: gd, query: q2, collection: col2, where: wh } = await import('firebase/firestore');
-              const mentionQ = q2(col2(db, 'users'), wh('handle', '==', mentionHandle));
-              const mentionSnap = await gd(mentionQ);
+              const mentionQ = query(collection(db, 'users'), where('handle', '==', mentionHandle));
+              const mentionSnap = await getDocs(mentionQ);
               if (!mentionSnap.empty) {
                 const mentionedUser = mentionSnap.docs[0].data();
                 if (mentionedUser.uid !== user.uid) {
