@@ -1139,20 +1139,20 @@ export default function Feed() {
                 </div>
               )}
 
-              {/* Sugestões de menção */}
+              {/* Sugestões de menção — aparece acima do input */}
               <AnimatePresence>
                 {showMentionList && mentionSuggestions.length > 0 && (
                   <motion.div
-                    initial={{ opacity: 0, y: 4 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 4 }}
-                    className="bg-[#111] border border-white/10 rounded-2xl overflow-hidden mb-2 shadow-xl"
+                    exit={{ opacity: 0, y: 8 }}
+                    className="absolute bottom-full left-0 right-0 mb-2 bg-[#1a1a1a] border border-white/15 rounded-3xl overflow-hidden shadow-2xl z-50"
                   >
                     {mentionSuggestions.map((u) => (
                       <button
                         key={u.uid}
-                        onClick={() => {
-                          // Substitui a query de menção pelo handle completo
+                        onMouseDown={(e) => {
+                          e.preventDefault();
                           const lastAt = newCommentText.lastIndexOf('@');
                           const before = newCommentText.slice(0, lastAt);
                           setNewCommentText(before + u.handle + ' ');
@@ -1160,12 +1160,12 @@ export default function Feed() {
                           setMentionSuggestions([]);
                           setMentionQuery('');
                         }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors text-left"
+                        className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/5 active:bg-white/10 transition-colors text-left border-b border-white/5 last:border-0"
                       >
-                        <UserAvatar styles={u.avatarStyles} seed={u.handle} size="sm" />
+                        <UserAvatar styles={u.avatarStyles} seed={u.handle} size="md" />
                         <div>
-                          <p className="text-xs font-black text-white">{u.displayName}</p>
-                          <p className="text-[10px] text-moss-400 font-bold">{u.handle}</p>
+                          <p className="text-sm font-black text-white">{u.displayName}</p>
+                          <p className="text-xs text-moss-400 font-bold">{u.handle}</p>
                         </div>
                       </button>
                     ))}
@@ -1173,79 +1173,78 @@ export default function Feed() {
                 )}
               </AnimatePresence>
 
+              <div className="relative">
               <div className="bg-white/5 p-4 rounded-[24px] border border-white/10 flex items-center gap-4 transition-all focus-within:border-moss-500/50">
-                <div className="w-8 h-8 rounded-lg bg-moss-900 border border-white/10 overflow-hidden">
+                <div className="w-8 h-8 rounded-lg bg-moss-900 border border-white/10 overflow-hidden shrink-0">
                   <img src={profile?.photoURL || `https://api.dicebear.com/9.x/avataaars/svg?seed=${user?.uid}`} alt="Me" />
                 </div>
-                <div className="flex-1 relative min-w-0">
-                  {/* Highlight layer — mostra @handles em verde */}
-                  <div
-                    aria-hidden="true"
-                    className="absolute inset-0 text-sm font-medium pointer-events-none whitespace-pre-wrap break-words leading-[1.4] py-0 overflow-hidden"
-                    style={{ color: 'transparent' }}
-                  >
-                    {newCommentText.split(/(@[a-z0-9_]+)/gi).map((part, i) =>
-                      /^@[a-z0-9_]+$/i.test(part)
-                        ? <span key={i} style={{ color: '#4ade80' }}>{part}</span>
-                        : <span key={i} style={{ color: 'transparent' }}>{part}</span>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    value={newCommentText}
-                    onChange={async (e) => {
-                      const val = e.target.value;
-                      setNewCommentText(val);
+                <input
+                  type="text"
+                  value={newCommentText}
+                  onChange={async (e) => {
+                    const val = e.target.value;
+                    setNewCommentText(val);
 
-                      // Detecta se está digitando uma menção
-                      const lastAt = val.lastIndexOf('@');
-                      if (lastAt !== -1) {
-                        const afterAt = val.slice(lastAt + 1);
-                        // Só busca se não tem espaço depois do @
-                        if (/^[a-z0-9_]*$/i.test(afterAt) && afterAt.length > 0) {
-                          setMentionQuery(afterAt);
-                          setShowMentionList(true);
-                          try {
+                    const lastAt = val.lastIndexOf('@');
+                    if (lastAt !== -1) {
+                      const afterAt = val.slice(lastAt + 1);
+                      // Mostra lista imediatamente ao digitar @ (afterAt pode ser vazio)
+                      if (/^[a-z0-9_]*$/i.test(afterAt)) {
+                        setShowMentionList(true);
+                        try {
+                          let snap;
+                          if (afterAt.length === 0) {
+                            // @ sozinho — busca usuários recentes (primeiros do Firestore)
+                            const q = query(collection(db, 'users'), where('handle', '>=', '@'), where('handle', '<=', '@'));
+                            snap = await getDocs(q);
+                          } else {
                             const term = `@${afterAt.toLowerCase()}`;
                             const q = query(
                               collection(db, 'users'),
                               where('handle', '>=', term),
                               where('handle', '<=', term + '')
                             );
-                            const snap = await getDocs(q);
-                            const results = snap.docs
-                              .map(d => d.data())
-                              .filter(u => u.uid !== user?.uid && u.email)
-                              .slice(0, 5);
-                            setMentionSuggestions(results);
-                          } catch (e) {
-                            setMentionSuggestions([]);
+                            snap = await getDocs(q);
                           }
-                        } else {
-                          setShowMentionList(false);
+                          const results = snap.docs
+                            .map(d => d.data())
+                            .filter((u: any) => u.uid !== user?.uid && u.email)
+                            .slice(0, 5);
+                          setMentionSuggestions(results);
+                        } catch (err) {
                           setMentionSuggestions([]);
                         }
                       } else {
+                        // Tem espaço depois do @ — fecha a lista
                         setShowMentionList(false);
                         setMentionSuggestions([]);
                       }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !showMentionList) handleAddComment();
-                      if (e.key === 'Escape') { setShowMentionList(false); setMentionSuggestions([]); }
-                    }}
-                    placeholder="Escreva sua brisa aqui..."
-                    className="bg-transparent w-full outline-none text-sm text-white placeholder:text-gray-600 font-medium relative z-10"
-                    style={{ caretColor: 'white' }}
-                  />
-                </div>
-                <button 
+                    } else {
+                      setShowMentionList(false);
+                      setMentionSuggestions([]);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !showMentionList) handleAddComment();
+                    if (e.key === 'Escape') { setShowMentionList(false); setMentionSuggestions([]); }
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => {
+                      setShowMentionList(false);
+                      setMentionSuggestions([]);
+                    }, 150);
+                  }}
+                  placeholder="Escreva sua brisa aqui..."
+                  className="bg-transparent flex-1 outline-none text-sm text-white placeholder:text-gray-600 font-medium"
+                />
+                <button
                   onClick={() => handleAddComment()}
                   disabled={commentLoading}
                   className="p-2 bg-moss-500 text-white rounded-xl shadow-lg shadow-moss-900/40 hover:bg-moss-400 transition-colors disabled:opacity-50 shrink-0"
                 >
                   <Send size={18} />
                 </button>
+              </div>
               </div>
             </motion.div>
           </>
