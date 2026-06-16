@@ -30,7 +30,6 @@ body {
   border-radius: 2rem;
 }
 
-
 .green-glow {
   text-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
 }
@@ -82,4 +81,9 @@ body {
   animation: rainbow 4s linear infinite;
 }
 
-
+/* Placeholder para contentEditable (campo de comentário com @mention) */
+[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: #4b5563;
+  pointer-events: none;
+}
