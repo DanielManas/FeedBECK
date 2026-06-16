@@ -1155,10 +1155,19 @@ export default function Feed() {
                           e.preventDefault();
                           const lastAt = newCommentText.lastIndexOf('@');
                           const before = newCommentText.slice(0, lastAt);
-                          setNewCommentText(before + u.handle + ' ');
+                          const newText = before + u.handle + ' ';
+                          setNewCommentText(newText);
                           setShowMentionList(false);
                           setMentionSuggestions([]);
                           setMentionQuery('');
+                          // Salvar no histórico de menções frequentes
+                          try {
+                            const key = 'feedbeck_mention_history';
+                            const existing = JSON.parse(localStorage.getItem(key) || '[]');
+                            const filtered = existing.filter((h: string) => h !== u.handle);
+                            const updated = [u.handle, ...filtered].slice(0, 10);
+                            localStorage.setItem(key, JSON.stringify(updated));
+                          } catch {}
                         }}
                         className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/5 active:bg-white/10 transition-colors text-left border-b border-white/5 last:border-0"
                       >
@@ -1173,49 +1182,88 @@ export default function Feed() {
                 )}
               </AnimatePresence>
 
-              <div className="relative">
-              <div className="bg-white/5 p-4 rounded-[24px] border border-white/10 flex items-center gap-4 transition-all focus-within:border-moss-500/50">
+              <div className="bg-white/5 rounded-[24px] border border-white/10 flex items-center gap-3 px-4 py-3 transition-all focus-within:border-moss-500/50">
                 <div className="w-8 h-8 rounded-lg bg-moss-900 border border-white/10 overflow-hidden shrink-0">
                   <img src={profile?.photoURL || `https://api.dicebear.com/9.x/avataaars/svg?seed=${user?.uid}`} alt="Me" />
                 </div>
-                <input
-                  type="text"
-                  value={newCommentText}
-                  onChange={async (e) => {
-                    const val = e.target.value;
-                    setNewCommentText(val);
 
-                    const lastAt = val.lastIndexOf('@');
+                {/* contentEditable para highlight verde no @handle igual WhatsApp */}
+                <div
+                  contentEditable
+                  suppressContentEditableWarning
+                  data-placeholder="Escreva sua brisa aqui..."
+                  onInput={async (e) => {
+                    const el = e.currentTarget;
+                    const rawText = el.innerText || '';
+
+                    // Guardar posição do cursor
+                    const sel = window.getSelection();
+                    const offset = sel?.focusOffset ?? rawText.length;
+
+                    // Rerender com spans coloridos
+                    const parts = rawText.split(/(@[a-zA-Z0-9_]+)/g);
+                    const html = parts.map(part =>
+                      /^@[a-zA-Z0-9_]+$/.test(part)
+                        ? `<span style="color:#4ade80;font-weight:700">${part}</span>`
+                        : `<span style="color:white">${part}</span>`
+                    ).join('');
+
+                    // Só atualiza o HTML se necessário para não resetar o cursor
+                    if (el.innerHTML !== html) {
+                      el.innerHTML = html;
+                      // Restaurar cursor ao final
+                      try {
+                        const range = document.createRange();
+                        const s = window.getSelection();
+                        const lastChild = el.lastChild;
+                        if (lastChild) {
+                          const textNode = lastChild.nodeType === 3 ? lastChild : lastChild.lastChild || lastChild;
+                          const len = textNode?.textContent?.length ?? 0;
+                          range.setStart(textNode || lastChild, Math.min(offset, len));
+                          range.collapse(true);
+                          s?.removeAllRanges();
+                          s?.addRange(range);
+                        }
+                      } catch {}
+                    }
+
+                    setNewCommentText(rawText);
+
+                    // Autocomplete de menções
+                    const lastAt = rawText.lastIndexOf('@');
                     if (lastAt !== -1) {
-                      const afterAt = val.slice(lastAt + 1);
-                      // Mostra lista imediatamente ao digitar @ (afterAt pode ser vazio)
-                      if (/^[a-z0-9_]*$/i.test(afterAt)) {
+                      const afterAt = rawText.slice(lastAt + 1);
+                      if (/^[a-zA-Z0-9_]*$/.test(afterAt) && !afterAt.includes(' ')) {
                         setShowMentionList(true);
                         try {
-                          let snap;
                           if (afterAt.length === 0) {
-                            // @ sozinho — busca usuários recentes (primeiros do Firestore)
-                            const q = query(collection(db, 'users'), where('handle', '>=', '@'), where('handle', '<=', '@'));
-                            snap = await getDocs(q);
+                            // @ sozinho — mostrar 5 mais marcados recentemente
+                            const key = 'feedbeck_mention_history';
+                            const history: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+                            if (history.length > 0) {
+                              const topHandles = history.slice(0, 5);
+                              const q = query(collection(db, 'users'), where('handle', 'in', topHandles));
+                              const snap = await getDocs(q);
+                              const results = snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email);
+                              setMentionSuggestions(results);
+                            } else {
+                              // Sem histórico — busca qualquer usuário
+                              const q = query(collection(db, 'users'), where('handle', '>=', '@'), where('handle', '<=', '@'));
+                              const snap = await getDocs(q);
+                              const results = snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email).slice(0, 5);
+                              setMentionSuggestions(results);
+                            }
                           } else {
                             const term = `@${afterAt.toLowerCase()}`;
-                            const q = query(
-                              collection(db, 'users'),
-                              where('handle', '>=', term),
-                              where('handle', '<=', term + '')
-                            );
-                            snap = await getDocs(q);
+                            const q = query(collection(db, 'users'), where('handle', '>=', term), where('handle', '<=', term + ''));
+                            const snap = await getDocs(q);
+                            const results = snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email).slice(0, 5);
+                            setMentionSuggestions(results);
                           }
-                          const results = snap.docs
-                            .map(d => d.data())
-                            .filter((u: any) => u.uid !== user?.uid && u.email)
-                            .slice(0, 5);
-                          setMentionSuggestions(results);
-                        } catch (err) {
+                        } catch {
                           setMentionSuggestions([]);
                         }
                       } else {
-                        // Tem espaço depois do @ — fecha a lista
                         setShowMentionList(false);
                         setMentionSuggestions([]);
                       }
@@ -1225,7 +1273,13 @@ export default function Feed() {
                     }
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !showMentionList) handleAddComment();
+                    if (e.key === 'Enter' && !showMentionList) {
+                      e.preventDefault();
+                      handleAddComment();
+                      // Limpar o contentEditable após enviar
+                      const el = e.currentTarget;
+                      setTimeout(() => { el.innerHTML = ''; }, 10);
+                    }
                     if (e.key === 'Escape') { setShowMentionList(false); setMentionSuggestions([]); }
                   }}
                   onBlur={() => {
@@ -1234,19 +1288,29 @@ export default function Feed() {
                       setMentionSuggestions([]);
                     }, 150);
                   }}
-                  placeholder="Escreva sua brisa aqui..."
-                  className="bg-transparent flex-1 outline-none text-sm text-white placeholder:text-gray-600 font-medium"
+                  className="flex-1 outline-none text-sm font-medium min-h-[20px] max-h-[80px] overflow-y-auto break-words"
+                  style={{
+                    color: 'white',
+                    caretColor: 'white',
+                    wordBreak: 'break-word',
+                  }}
+                  data-gramm="false"
+                  spellCheck={false}
                 />
+
                 <button
-                  onClick={() => handleAddComment()}
+                  onClick={() => {
+                    handleAddComment();
+                    // Limpar o contentEditable após enviar
+                    const el = document.querySelector('[data-placeholder="Escreva sua brisa aqui..."]') as HTMLElement;
+                    if (el) setTimeout(() => { el.innerHTML = ''; }, 10);
+                  }}
                   disabled={commentLoading}
                   className="p-2 bg-moss-500 text-white rounded-xl shadow-lg shadow-moss-900/40 hover:bg-moss-400 transition-colors disabled:opacity-50 shrink-0"
                 >
                   <Send size={18} />
                 </button>
               </div>
-              </div>
-            </motion.div>
           </>
         )}
       </AnimatePresence>
