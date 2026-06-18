@@ -898,18 +898,12 @@ export default function Feed() {
               </div>
             </motion.div>
           ))
-        ) : (
-          <div className="text-center py-20">
-            <p className="text-gray-600 italic text-sm">Nenhum relato por aqui ainda...</p>
-          </div>
-        )}
-      </section>
 
       {/* Delete Review Modal */}
       <AnimatePresence>
         {isDeleting && (
           <>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -917,7 +911,7 @@ export default function Feed() {
               className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md"
             />
             <div className="fixed inset-0 z-[310] flex items-center justify-center p-6 pointer-events-none">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -931,13 +925,13 @@ export default function Feed() {
                   Você está prestes a apagar este post. Tem certeza? Essa ação não pode ser desfeita.
                 </p>
                 <div className="flex flex-col gap-3">
-                  <button 
+                  <button
                     onClick={() => deleteReview(isDeleting)}
                     className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs transition-all shadow-lg shadow-red-900/20"
                   >
                     Sim, excluir agora
                   </button>
-                  <button 
+                  <button
                     onClick={() => setIsDeleting(null)}
                     className="w-full bg-white/5 hover:bg-white/10 text-gray-400 font-bold py-4 rounded-2xl uppercase tracking-widest text-xs transition-all"
                   >
@@ -949,12 +943,12 @@ export default function Feed() {
           </>
         )}
       </AnimatePresence>
-      
+
       {/* Report Modal */}
       <AnimatePresence>
         {reportModal && (
           <>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -962,7 +956,7 @@ export default function Feed() {
               className="fixed inset-0 z-[400] bg-black/80 backdrop-blur-md"
             />
             <div className="fixed inset-0 z-[410] flex items-center justify-center p-6 pointer-events-none">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -971,27 +965,27 @@ export default function Feed() {
                 <div className="bg-red-500/10 w-16 h-16 rounded-full flex items-center justify-center mb-6 mx-auto">
                   <AlertTriangle size={32} className="text-red-500" />
                 </div>
-                <h3 className="text-xl font-black text-white text-center uppercase tracking-tighter mb-2">Denunciar {reportModal.type === 'post' ? 'Relato' : 'Comentário'}</h3>
+                <h3 className="text-xl font-black text-white text-center uppercase tracking-tighter mb-2">
+                  Denunciar {reportModal.type === 'post' ? 'Relato' : 'Comentário'}
+                </h3>
                 <p className="text-gray-400 text-center text-xs mb-6 italic">
                   Isso será revisado pela nossa moderação. Por favor, explique o motivo.
                 </p>
-                
-                <textarea 
+                <textarea
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
                   placeholder="Por que você está denunciando isso? (ex: spam, insultos, impróprio...)"
                   className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-white outline-none focus:border-moss-500 transition-all resize-none h-32 mb-6 placeholder:text-gray-600"
                 />
-
                 <div className="flex flex-col gap-3">
-                  <button 
+                  <button
                     onClick={handleReport}
                     disabled={reportLoading || !reportReason.trim()}
                     className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs transition-all shadow-lg shadow-red-900/20 disabled:opacity-50"
                   >
                     {reportLoading ? 'Enviando...' : 'Enviar Denúncia'}
                   </button>
-                  <button 
+                  <button
                     onClick={() => setReportModal(null)}
                     disabled={reportLoading}
                     className="w-full bg-white/5 hover:bg-white/10 text-gray-400 font-bold py-4 rounded-2xl uppercase tracking-widest text-xs transition-all"
@@ -1009,15 +1003,14 @@ export default function Feed() {
       <AnimatePresence>
         {activeCommentsId && (
           <>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setActiveCommentsId(null)}
               className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md"
             />
-            
-            <motion.div 
+            <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
@@ -1027,9 +1020,11 @@ export default function Feed() {
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h3 className="text-xl font-black uppercase tracking-tighter text-moss-400">Comentários</h3>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Relato de {reviews.find(r => r.id === activeCommentsId)?.userName}</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">
+                    Relato de {reviews.find(r => r.id === activeCommentsId)?.userName}
+                  </p>
                 </div>
-                <button 
+                <button
                   onClick={() => setActiveCommentsId(null)}
                   className="p-2 bg-white/5 rounded-full text-gray-400"
                 >
@@ -1037,55 +1032,41 @@ export default function Feed() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-6 pr-2 no-scrollbar mb-6 flex flex-col">
+              <div className="flex-1 overflow-y-auto space-y-6 pr-2 no-scrollbar mb-4 flex flex-col">
                 <AnimatePresence initial={false}>
                   {comments.length > 0 ? (
                     comments.map((comment) => {
                       const commenterId = (comment as any).userId || (comment as any).authorId;
                       const liveProfile = commenterId ? commenterProfiles[commenterId] : null;
-                      
                       const handleVal = liveProfile?.handle || (comment as any).userHandle || comment.authorHandle || '@usuario';
                       const nameVal = liveProfile?.displayName || (comment as any).userName || handleVal.replace('@', '');
                       const avatarStylesVal = liveProfile?.avatarStyles || (comment as any).userAvatarStyles || (handleVal === profile?.handle ? profile?.avatarStyles : null);
-                      const seedVal = handleVal;
 
                       return (
-                        <motion.div 
-                          key={comment.id} 
+                        <motion.div
+                          key={comment.id}
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, scale: 0.95 }}
                           className="flex gap-4"
                         >
-                          <UserAvatar 
-                            styles={avatarStylesVal} 
-                            seed={seedVal} 
-                            size="sm" 
-                          />
+                          <UserAvatar styles={avatarStylesVal} seed={handleVal} size="sm" />
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <Link to={`/profile/${handleVal.replace('@', '')}`} onClick={() => setActiveCommentsId(null)}>
-                                <span className="text-xs font-bold text-moss-400 uppercase tracking-tighter hover:underline">
-                                  {nameVal}
-                                </span>
-                                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter ml-1">
-                                  {handleVal}
-                                </span>
+                                <span className="text-xs font-bold text-moss-400 uppercase tracking-tighter hover:underline">{nameVal}</span>
+                                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter ml-1">{handleVal}</span>
                               </Link>
                               <span className="text-[9px] text-gray-600 font-bold ml-auto">{formatRelativeTime(comment.createdAt)}</span>
                               {(isAdmin || user?.uid === commenterId) && (
-                                <button 
-                                  onClick={() => handleDeleteComment(comment.id)}
-                                  className="text-gray-600 hover:text-red-500 transition-colors ml-1"
-                                >
+                                <button onClick={() => handleDeleteComment(comment.id)} className="text-gray-600 hover:text-red-500 transition-colors ml-1">
                                   <Trash2 size={12} />
                                 </button>
                               )}
                               {user && commenterId !== user.uid && (
-                                <button 
+                                <button
                                   onClick={() => setReportModal({ id: comment.id, type: 'comment', content: comment.text, targetUserId: comment.authorId || comment.userId })}
                                   className="text-gray-600 hover:text-red-500 transition-colors ml-1"
-                                  title="Denunciar Comentário"
                                 >
                                   <Flag size={12} />
                                 </button>
@@ -1098,21 +1079,12 @@ export default function Feed() {
                             )}
                             <p className="text-sm text-gray-300 leading-relaxed italic">{comment.text}</p>
                             {user && (
-                              <div className="flex items-center gap-3 mt-1">
-                                <button 
-                                  onClick={() => {
-                                    setReplyingTo({
-                                      commentId: comment.id,
-                                      authorHandle: handleVal,
-                                      authorId: commenterId,
-                                      text: comment.text
-                                    });
-                                  }}
-                                  className="text-[10px] font-extrabold uppercase text-moss-500 hover:text-moss-400 cursor-pointer active:scale-95 transition-all"
-                                >
-                                  Responder
-                                </button>
-                              </div>
+                              <button
+                                onClick={() => setReplyingTo({ commentId: comment.id, authorHandle: handleVal, authorId: commenterId, text: comment.text })}
+                                className="text-[10px] font-extrabold uppercase text-moss-500 hover:text-moss-400 cursor-pointer active:scale-95 transition-all mt-1"
+                              >
+                                Responder
+                              </button>
                             )}
                           </div>
                         </motion.div>
@@ -1125,111 +1097,66 @@ export default function Feed() {
               </div>
 
               {replyingTo && (
-                <div className="bg-moss-500/10 border-l-4 border-moss-500 px-4 py-2 rounded-t-xl flex justify-between items-center text-xs text-gray-300 mb-2 max-w-full">
+                <div className="bg-moss-500/10 border-l-4 border-moss-500 px-4 py-2 rounded-t-xl flex justify-between items-center text-xs text-gray-300 mb-2">
                   <div className="truncate pr-4 flex-1">
-                    <span className="font-bold text-moss-400">Respondendo a {replyingTo.authorHandle}:</span>{" "}
+                    <span className="font-bold text-moss-400">Respondendo a {replyingTo.authorHandle}:</span>{' '}
                     <span className="italic opacity-60">"{replyingTo.text}"</span>
                   </div>
-                  <button 
-                    onClick={() => setReplyingTo(null)}
-                    className="p-1 text-gray-500 hover:text-white transition-colors"
-                  >
+                  <button onClick={() => setReplyingTo(null)} className="p-1 text-gray-500 hover:text-white transition-colors">
                     <X size={14} />
                   </button>
                 </div>
               )}
 
-              {/* Sugestões de menção — aparece acima do input */}
-              <AnimatePresence>
-                {showMentionList && mentionSuggestions.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    className="absolute bottom-full left-0 right-0 mb-2 bg-[#1a1a1a] border border-white/15 rounded-3xl overflow-hidden shadow-2xl z-50"
-                  >
-                    {mentionSuggestions.map((u) => (
-                      <button
-                        key={u.uid}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          const lastAt = newCommentText.lastIndexOf('@');
-                          const before = newCommentText.slice(0, lastAt);
-                          const newText = before + u.handle + ' ';
-                          setNewCommentText(newText);
-                          setShowMentionList(false);
-                          setMentionSuggestions([]);
-                          setMentionQuery('');
-                          // Salvar no histórico de menções frequentes
-                          try {
-                            const key = 'feedbeck_mention_history';
-                            const existing = JSON.parse(localStorage.getItem(key) || '[]');
-                            const filtered = existing.filter((h: string) => h !== u.handle);
-                            const updated = [u.handle, ...filtered].slice(0, 10);
-                            localStorage.setItem(key, JSON.stringify(updated));
-                          } catch {}
-                        }}
-                        className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/5 active:bg-white/10 transition-colors text-left border-b border-white/5 last:border-0"
-                      >
-                        <UserAvatar styles={u.avatarStyles} seed={u.handle} size="md" />
-                        <div>
-                          <p className="text-sm font-black text-white">{u.displayName}</p>
-                          <p className="text-xs text-moss-400 font-bold">{u.handle}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Lista de sugestões de menção — aparece entre comentários e input */}
+              {showMentionList && mentionSuggestions.length > 0 && (
+                <div className="bg-[#1a1a1a] border border-white/15 rounded-3xl overflow-hidden shadow-2xl mb-2">
+                  {mentionSuggestions.map((u) => (
+                    <button
+                      key={u.uid}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        const lastAt = newCommentText.lastIndexOf('@');
+                        const before = newCommentText.slice(0, lastAt);
+                        const newText = before + u.handle + ' ';
+                        setNewCommentText(newText);
+                        const editable = document.querySelector('[data-mention-input="true"]') as HTMLElement;
+                        if (editable) editable.innerText = newText;
+                        setShowMentionList(false);
+                        setMentionSuggestions([]);
+                        setMentionQuery('');
+                        try {
+                          const key = 'feedbeck_mention_history';
+                          const existing = JSON.parse(localStorage.getItem(key) || '[]');
+                          const filtered = existing.filter((h: string) => h !== u.handle);
+                          localStorage.setItem(key, JSON.stringify([u.handle, ...filtered].slice(0, 10)));
+                        } catch {}
+                      }}
+                      className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/5 active:bg-white/10 transition-colors text-left border-b border-white/5 last:border-0"
+                    >
+                      <UserAvatar styles={u.avatarStyles} seed={u.handle} size="md" />
+                      <div>
+                        <p className="text-sm font-black text-white">{u.displayName}</p>
+                        <p className="text-xs text-moss-400 font-bold">{u.handle}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
 
-              <div className="bg-white/5 rounded-[24px] border border-white/10 flex items-center gap-3 px-4 py-3 transition-all focus-within:border-moss-500/50">
+              <div className="bg-white/5 p-4 rounded-[24px] border border-white/10 flex items-center gap-4 transition-all focus-within:border-moss-500/50">
                 <div className="w-8 h-8 rounded-lg bg-moss-900 border border-white/10 overflow-hidden shrink-0">
                   <img src={profile?.photoURL || `https://api.dicebear.com/9.x/avataaars/svg?seed=${user?.uid}`} alt="Me" />
                 </div>
-
-                {/* contentEditable para highlight verde no @handle igual WhatsApp */}
                 <div
                   contentEditable
                   suppressContentEditableWarning
+                  data-mention-input="true"
                   data-placeholder="Escreva sua brisa aqui..."
                   onInput={async (e) => {
                     const el = e.currentTarget;
                     const rawText = el.innerText || '';
-
-                    // Guardar posição do cursor
-                    const sel = window.getSelection();
-                    const offset = sel?.focusOffset ?? rawText.length;
-
-                    // Rerender com spans coloridos
-                    const parts = rawText.split(/(@[a-zA-Z0-9_]+)/g);
-                    const html = parts.map(part =>
-                      /^@[a-zA-Z0-9_]+$/.test(part)
-                        ? `<span style="color:#4ade80;font-weight:700">${part}</span>`
-                        : `<span style="color:white">${part}</span>`
-                    ).join('');
-
-                    // Só atualiza o HTML se necessário para não resetar o cursor
-                    if (el.innerHTML !== html) {
-                      el.innerHTML = html;
-                      // Restaurar cursor ao final
-                      try {
-                        const range = document.createRange();
-                        const s = window.getSelection();
-                        const lastChild = el.lastChild;
-                        if (lastChild) {
-                          const textNode = lastChild.nodeType === 3 ? lastChild : lastChild.lastChild || lastChild;
-                          const len = textNode?.textContent?.length ?? 0;
-                          range.setStart(textNode || lastChild, Math.min(offset, len));
-                          range.collapse(true);
-                          s?.removeAllRanges();
-                          s?.addRange(range);
-                        }
-                      } catch {}
-                    }
-
                     setNewCommentText(rawText);
-
-                    // Autocomplete de menções
                     const lastAt = rawText.lastIndexOf('@');
                     if (lastAt !== -1) {
                       const afterAt = rawText.slice(lastAt + 1);
@@ -1237,32 +1164,25 @@ export default function Feed() {
                         setShowMentionList(true);
                         try {
                           if (afterAt.length === 0) {
-                            // @ sozinho — mostrar 5 mais marcados recentemente
                             const key = 'feedbeck_mention_history';
                             const history: string[] = JSON.parse(localStorage.getItem(key) || '[]');
                             if (history.length > 0) {
-                              const topHandles = history.slice(0, 5);
-                              const q = query(collection(db, 'users'), where('handle', 'in', topHandles));
+                              const q = query(collection(db, 'users'), where('handle', 'in', history.slice(0, 5)));
                               const snap = await getDocs(q);
-                              const results = snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email);
-                              setMentionSuggestions(results);
+                              setMentionSuggestions(snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email));
                             } else {
-                              // Sem histórico — busca qualquer usuário
-                              const q = query(collection(db, 'users'), where('handle', '>=', '@'), where('handle', '<=', '@'));
+                              const q = query(collection(db, 'users'), where('handle', '>=', '@'), where('handle', '<=', '@z'));
                               const snap = await getDocs(q);
-                              const results = snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email).slice(0, 5);
-                              setMentionSuggestions(results);
+                              setMentionSuggestions(snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email).slice(0, 5));
                             }
                           } else {
-                            const term = `@${afterAt.toLowerCase()}`;
-                            const q = query(collection(db, 'users'), where('handle', '>=', term), where('handle', '<=', term + ''));
+                            const term = '@' + afterAt.toLowerCase();
+                            const termEnd = term.slice(0, -1) + String.fromCharCode(term.charCodeAt(term.length - 1) + 1);
+                            const q = query(collection(db, 'users'), where('handle', '>=', term), where('handle', '<', termEnd.length > term.length ? termEnd : term + 'z'));
                             const snap = await getDocs(q);
-                            const results = snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email).slice(0, 5);
-                            setMentionSuggestions(results);
+                            setMentionSuggestions(snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email).slice(0, 5));
                           }
-                        } catch {
-                          setMentionSuggestions([]);
-                        }
+                        } catch { setMentionSuggestions([]); }
                       } else {
                         setShowMentionList(false);
                         setMentionSuggestions([]);
@@ -1276,33 +1196,21 @@ export default function Feed() {
                     if (e.key === 'Enter' && !showMentionList) {
                       e.preventDefault();
                       handleAddComment();
-                      // Limpar o contentEditable após enviar
                       const el = e.currentTarget;
                       setTimeout(() => { el.innerHTML = ''; }, 10);
                     }
                     if (e.key === 'Escape') { setShowMentionList(false); setMentionSuggestions([]); }
                   }}
-                  onBlur={() => {
-                    setTimeout(() => {
-                      setShowMentionList(false);
-                      setMentionSuggestions([]);
-                    }, 150);
-                  }}
-                  className="flex-1 outline-none text-sm font-medium min-h-[20px] max-h-[80px] overflow-y-auto break-words"
-                  style={{
-                    color: 'white',
-                    caretColor: 'white',
-                    wordBreak: 'break-word',
-                  }}
+                  onBlur={() => { setTimeout(() => { setShowMentionList(false); setMentionSuggestions([]); }, 150); }}
+                  className="flex-1 outline-none text-sm font-medium min-h-[20px] max-h-[80px] overflow-y-auto"
+                  style={{ color: 'white', caretColor: 'white', wordBreak: 'break-word' }}
                   data-gramm="false"
                   spellCheck={false}
                 />
-
                 <button
                   onClick={() => {
                     handleAddComment();
-                    // Limpar o contentEditable após enviar
-                    const el = document.querySelector('[data-placeholder="Escreva sua brisa aqui..."]') as HTMLElement;
+                    const el = document.querySelector('[data-mention-input="true"]') as HTMLElement;
                     if (el) setTimeout(() => { el.innerHTML = ''; }, 10);
                   }}
                   disabled={commentLoading}
@@ -1311,6 +1219,7 @@ export default function Feed() {
                   <Send size={18} />
                 </button>
               </div>
+            </motion.div>
           </>
         )}
       </AnimatePresence>
