@@ -898,6 +898,12 @@ export default function Feed() {
               </div>
             </motion.div>
           ))
+        ) : (
+          <div className="text-center py-20">
+            <p className="text-gray-600 italic text-sm">Nenhum relato por aqui ainda...</p>
+          </div>
+        )}
+      </section>
 
       {/* Delete Review Modal */}
       <AnimatePresence>
