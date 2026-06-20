@@ -980,14 +980,14 @@ export default function Feed() {
                 <textarea
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
-                  placeholder="Por que você está denunciando isso? (ex: spam, insultos, impróprio...)"
+                  placeholder="Por que você está denunciando isso?"
                   className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-white outline-none focus:border-moss-500 transition-all resize-none h-32 mb-6 placeholder:text-gray-600"
                 />
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={handleReport}
                     disabled={reportLoading || !reportReason.trim()}
-                    className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs transition-all shadow-lg shadow-red-900/20 disabled:opacity-50"
+                    className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs transition-all disabled:opacity-50"
                   >
                     {reportLoading ? 'Enviando...' : 'Enviar Denúncia'}
                   </button>
@@ -1021,7 +1021,7 @@ export default function Feed() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed bottom-0 left-0 right-0 z-[310] bg-[#0d0d0d] border-t border-white/10 rounded-t-[40px] max-h-[85vh] flex flex-col shadow-2xl p-6 pb-20 max-w-lg mx-auto"
+              className="fixed bottom-0 left-0 right-0 z-[310] bg-[#0d0d0d] border-t border-white/10 rounded-t-[40px] max-h-[90vh] flex flex-col shadow-2xl p-6 pb-24 max-w-lg mx-auto"
             >
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -1047,7 +1047,6 @@ export default function Feed() {
                       const handleVal = liveProfile?.handle || (comment as any).userHandle || comment.authorHandle || '@usuario';
                       const nameVal = liveProfile?.displayName || (comment as any).userName || handleVal.replace('@', '');
                       const avatarStylesVal = liveProfile?.avatarStyles || (comment as any).userAvatarStyles || (handleVal === profile?.handle ? profile?.avatarStyles : null);
-
                       return (
                         <motion.div
                           key={comment.id}
@@ -1114,9 +1113,9 @@ export default function Feed() {
                 </div>
               )}
 
-              {/* Lista de sugestões de menção — aparece entre comentários e input */}
+              {/* Lista de sugestões de menção — aparece acima do input */}
               {showMentionList && mentionSuggestions.length > 0 && (
-                <div className="bg-[#1a1a1a] border border-white/15 rounded-3xl overflow-hidden shadow-2xl mb-2">
+                <div className="bg-[#1c1c1c] border border-white/20 rounded-3xl overflow-hidden shadow-2xl mb-3">
                   {mentionSuggestions.map((u) => (
                     <button
                       key={u.uid}
@@ -1138,12 +1137,14 @@ export default function Feed() {
                           localStorage.setItem(key, JSON.stringify([u.handle, ...filtered].slice(0, 10)));
                         } catch {}
                       }}
-                      className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/5 active:bg-white/10 transition-colors text-left border-b border-white/5 last:border-0"
+                      className="w-full flex items-center gap-5 px-6 py-5 hover:bg-white/5 active:bg-white/10 transition-colors text-left border-b border-white/10 last:border-0"
                     >
-                      <UserAvatar styles={u.avatarStyles} seed={u.handle} size="md" />
+                      <div className="shrink-0">
+                        <UserAvatar styles={u.avatarStyles} seed={u.handle} size="lg" />
+                      </div>
                       <div>
-                        <p className="text-sm font-black text-white">{u.displayName}</p>
-                        <p className="text-xs text-moss-400 font-bold">{u.handle}</p>
+                        <p className="text-base font-black text-white leading-tight">{u.displayName}</p>
+                        <p className="text-sm text-moss-400 font-bold mt-1">{u.handle}</p>
                       </div>
                     </button>
                   ))}
@@ -1170,21 +1171,20 @@ export default function Feed() {
                         setShowMentionList(true);
                         try {
                           if (afterAt.length === 0) {
-                            const key = 'feedbeck_mention_history';
-                            const history: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+                            const histKey = 'feedbeck_mention_history';
+                            const history: string[] = JSON.parse(localStorage.getItem(histKey) || '[]');
                             if (history.length > 0) {
                               const q = query(collection(db, 'users'), where('handle', 'in', history.slice(0, 5)));
                               const snap = await getDocs(q);
                               setMentionSuggestions(snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email));
                             } else {
-                              const q = query(collection(db, 'users'), where('handle', '>=', '@'), where('handle', '<=', '@z'));
+                              const q = query(collection(db, 'users'), where('handle', '>=', '@a'), where('handle', '<=', '@zzzzzz'));
                               const snap = await getDocs(q);
                               setMentionSuggestions(snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email).slice(0, 5));
                             }
                           } else {
                             const term = '@' + afterAt.toLowerCase();
-                            const termEnd = term.slice(0, -1) + String.fromCharCode(term.charCodeAt(term.length - 1) + 1);
-                            const q = query(collection(db, 'users'), where('handle', '>=', term), where('handle', '<', termEnd.length > term.length ? termEnd : term + 'z'));
+                            const q = query(collection(db, 'users'), where('handle', '>=', term), where('handle', '<=', term + 'zzzz'));
                             const snap = await getDocs(q);
                             setMentionSuggestions(snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email).slice(0, 5));
                           }
