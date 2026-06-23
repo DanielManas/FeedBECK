@@ -1051,7 +1051,16 @@ export default function Feed() {
                     const newText = before + u.handle + " ";
                     setNewCommentText(newText);
                     const editable = document.querySelector("[data-mention-input=\"true\"]") as HTMLElement;
-                    if (editable) editable.innerText = newText;
+                    if (editable) {
+                      editable.innerText = newText;
+                      const range = document.createRange();
+                      const sel = window.getSelection();
+                      range.selectNodeContents(editable);
+                      range.collapse(false);
+                      sel?.removeAllRanges();
+                      sel?.addRange(range);
+                      editable.focus();
+                    }
                     setShowMentionList(false);
                     setMentionSuggestions([]);
                     setMentionQuery("");
