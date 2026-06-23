@@ -120,7 +120,8 @@ export default function Feed() {
   const [reportLoading, setReportLoading] = useState(false);
   const [, setTick] = useState(0);
 
-  // Estado para posição da lista de menção acima do teclado
+  // Ref do container do input para calcular posição da lista de menção
+  const inputAreaRef = useRef<HTMLDivElement | null>(null);
   const [mentionListBottom, setMentionListBottom] = useState(0);
 
   // Notifications state
@@ -148,26 +149,21 @@ export default function Feed() {
     }
   };
 
-  // Rastreia a posição do teclado via visualViewport para fixar a lista de menção acima dele
+  // Calcula o bottom da lista de menção baseado na posição real do input na tela
+  const recalcMentionBottom = () => {
+    if (inputAreaRef.current) {
+      const rect = inputAreaRef.current.getBoundingClientRect();
+      // bottom = distância do input até o final da tela (o teclado já empurrou o elemento)
+      setMentionListBottom(window.innerHeight - rect.top + 8);
+    }
+  };
+
   useEffect(() => {
-    const updateMentionBottom = () => {
-      if (window.visualViewport) {
-        const viewportHeight = window.visualViewport.height;
-        const offsetTop = window.visualViewport.offsetTop;
-        const windowHeight = window.innerHeight;
-        // bottom = quanto o teclado está empurrando para cima
-        const keyboardHeight = windowHeight - viewportHeight - offsetTop;
-        setMentionListBottom(Math.max(0, keyboardHeight) + 80); // 80px = altura aprox do input area
-      }
-    };
-
-    window.visualViewport?.addEventListener('resize', updateMentionBottom);
-    window.visualViewport?.addEventListener('scroll', updateMentionBottom);
-    updateMentionBottom();
-
+    window.visualViewport?.addEventListener('resize', recalcMentionBottom);
+    window.visualViewport?.addEventListener('scroll', recalcMentionBottom);
     return () => {
-      window.visualViewport?.removeEventListener('resize', updateMentionBottom);
-      window.visualViewport?.removeEventListener('scroll', updateMentionBottom);
+      window.visualViewport?.removeEventListener('resize', recalcMentionBottom);
+      window.visualViewport?.removeEventListener('scroll', recalcMentionBottom);
     };
   }, []);
 
@@ -1226,7 +1222,7 @@ export default function Feed() {
               )}
 
               {/* Input area */}
-              <div className="bg-white/5 p-4 rounded-[24px] border border-white/10 flex items-center gap-4 transition-all focus-within:border-moss-500/50">
+              <div ref={inputAreaRef} className="bg-white/5 p-4 rounded-[24px] border border-white/10 flex items-center gap-4 transition-all focus-within:border-moss-500/50">
                 <div className="shrink-0">
                   <UserAvatar styles={profile?.avatarStyles} seed={user?.uid} size="sm" rainbow={profile?.rainbowActive} />
                 </div>
@@ -1243,6 +1239,7 @@ export default function Feed() {
                     if (lastAt !== -1) {
                       const afterAt = rawText.slice(lastAt + 1);
                       if (/^[a-zA-Z0-9_]*$/.test(afterAt) && !afterAt.includes(' ')) {
+                        recalcMentionBottom();
                         setShowMentionList(true);
                         try {
                           if (afterAt.length === 0) {
