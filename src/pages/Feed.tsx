@@ -1037,12 +1037,6 @@ export default function Feed() {
             style={{ bottom: mentionListBottom, left: 0, right: 0, zIndex: 500 }}
             className="fixed px-4"
           >
-            {/* Label flutuante */}
-            <div className="flex items-center gap-2 mb-2 px-2">
-              <span className="text-[9px] font-black uppercase tracking-[0.25em] text-moss-400/70">Marcar pessoa</span>
-              <div className="flex-1 h-px bg-moss-500/20" />
-            </div>
-
             <div className="bg-[#131313] border border-moss-500/20 rounded-2xl overflow-y-auto shadow-2xl shadow-black/60 max-w-lg mx-auto divide-y divide-white/5" style={{ maxHeight: 180 }}>
               {mentionSuggestions.map((u, idx) => (
                 <motion.button
