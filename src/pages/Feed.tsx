@@ -120,6 +120,9 @@ export default function Feed() {
   const [reportLoading, setReportLoading] = useState(false);
   const [, setTick] = useState(0);
 
+  // Estado para posição da lista de menção acima do teclado
+  const [mentionListBottom, setMentionListBottom] = useState(0);
+
   // Notifications state
   const [unreadRepliesCount, setUnreadRepliesCount] = useState(0);
 
@@ -144,6 +147,29 @@ export default function Feed() {
       setPlayingId(id);
     }
   };
+
+  // Rastreia a posição do teclado via visualViewport para fixar a lista de menção acima dele
+  useEffect(() => {
+    const updateMentionBottom = () => {
+      if (window.visualViewport) {
+        const viewportHeight = window.visualViewport.height;
+        const offsetTop = window.visualViewport.offsetTop;
+        const windowHeight = window.innerHeight;
+        // bottom = quanto o teclado está empurrando para cima
+        const keyboardHeight = windowHeight - viewportHeight - offsetTop;
+        setMentionListBottom(Math.max(0, keyboardHeight) + 80); // 80px = altura aprox do input area
+      }
+    };
+
+    window.visualViewport?.addEventListener('resize', updateMentionBottom);
+    window.visualViewport?.addEventListener('scroll', updateMentionBottom);
+    updateMentionBottom();
+
+    return () => {
+      window.visualViewport?.removeEventListener('resize', updateMentionBottom);
+      window.visualViewport?.removeEventListener('scroll', updateMentionBottom);
+    };
+  }, []);
 
   const handleReport = async () => {
     if (!reportModal || !reportReason.trim() || !user) return;
@@ -447,14 +473,14 @@ export default function Feed() {
   const handleAddComment = async () => {
     if (!activeCommentsId || !newCommentText.trim() || !user) return;
 
-    // Captura os valores antes de limpar o estado
     const textToSend = newCommentText.trim();
     const replyingToSnapshot = replyingTo;
     const currentReview = reviews.find(r => r.id === activeCommentsId);
 
-    // Limpa o input imediatamente para dar feedback visual ao usuário
     setNewCommentText('');
     setReplyingTo(null);
+    setShowMentionList(false);
+    setMentionSuggestions([]);
     setCommentLoading(true);
 
     try {
@@ -485,15 +511,12 @@ export default function Feed() {
         commentsCount: increment(1)
       });
 
-      // Notificações em bloco separado — erro aqui não afeta o comentário já salvo
       try {
         const senderAvatarStyles = profile?.avatarStyles || null;
         const reviewTitle = currentReview?.title || '';
 
-        // Detectar menções (@handle) no texto
         const mentionMatches = textToSend.match(/@[a-z0-9_]+/g) || [];
 
-        // Notificação de reply (resposta a comentário)
         if (replyingToSnapshot && replyingToSnapshot.authorId !== user.uid) {
           const notificationRef = doc(collection(db, 'notifications'));
           await setDoc(notificationRef, {
@@ -514,7 +537,6 @@ export default function Feed() {
           });
         }
 
-        // Notificação de comentário no post
         if (currentReview && currentReview.authorId !== user.uid) {
           const postNotifRef = doc(collection(db, 'notifications'));
           await setDoc(postNotifRef, {
@@ -535,11 +557,9 @@ export default function Feed() {
           });
         }
 
-        // Notificações de menção (@handle no texto)
         if (mentionMatches.length > 0) {
           const mentionedHandles = [...new Set(mentionMatches)];
           for (const mentionHandle of mentionedHandles) {
-            // Busca o usuário mencionado para obter seu ID
             try {
               const mentionQ = query(collection(db, 'users'), where('handle', '==', mentionHandle));
               const mentionSnap = await getDocs(mentionQ);
@@ -576,7 +596,6 @@ export default function Feed() {
 
     } catch (err) {
       console.error('Error adding comment:', err);
-      // Devolve o texto ao input se o comentário falhou
       setNewCommentText(textToSend);
     } finally {
       setCommentLoading(false);
@@ -1005,6 +1024,84 @@ export default function Feed() {
         )}
       </AnimatePresence>
 
+      {/* Lista de sugestões de menção — FIXED acima do teclado, fora do bottom sheet */}
+      <AnimatePresence>
+        {showMentionList && mentionSuggestions.length > 0 && activeCommentsId && (
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.97 }}
+            transition={{ type: 'spring', damping: 22, stiffness: 260 }}
+            style={{ bottom: mentionListBottom, left: 0, right: 0, zIndex: 500 }}
+            className="fixed px-4"
+          >
+            {/* Label flutuante */}
+            <div className="flex items-center gap-2 mb-2 px-2">
+              <span className="text-[9px] font-black uppercase tracking-[0.25em] text-moss-400/70">Marcar pessoa</span>
+              <div className="flex-1 h-px bg-moss-500/20" />
+            </div>
+
+            <div className="bg-[#131313] border border-moss-500/20 rounded-3xl overflow-hidden shadow-2xl shadow-black/60 max-w-lg mx-auto divide-y divide-white/5">
+              {mentionSuggestions.map((u, idx) => (
+                <motion.button
+                  key={u.uid}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.04 }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    const lastAt = newCommentText.lastIndexOf('@');
+                    const before = newCommentText.slice(0, lastAt);
+                    const newText = before + u.handle + ' ';
+                    setNewCommentText(newText);
+                    const editable = document.querySelector('[data-mention-input="true"]') as HTMLElement;
+                    if (editable) editable.innerText = newText;
+                    setShowMentionList(false);
+                    setMentionSuggestions([]);
+                    setMentionQuery('');
+                    try {
+                      const key = 'feedbeck_mention_history';
+                      const existing = JSON.parse(localStorage.getItem(key) || '[]');
+                      const filtered = existing.filter((h: string) => h !== u.handle);
+                      localStorage.setItem(key, JSON.stringify([u.handle, ...filtered].slice(0, 10)));
+                    } catch {}
+                  }}
+                  className="w-full flex items-center gap-4 px-5 py-4 hover:bg-moss-500/10 active:bg-moss-500/20 transition-all text-left group"
+                >
+                  {/* Avatar com anel verde ao hover */}
+                  <div className="shrink-0 relative">
+                    <div className="rounded-full p-[2px] bg-transparent group-hover:bg-moss-500/40 transition-all">
+                      <UserAvatar styles={u.avatarStyles} seed={u.handle} size="md" />
+                    </div>
+                    {/* Indicador de "vai marcar" */}
+                    <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-moss-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+                      <span className="text-[8px] font-black text-white">@</span>
+                    </div>
+                  </div>
+
+                  {/* Info do usuário */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black text-white leading-tight truncate group-hover:text-moss-300 transition-colors">
+                      {u.displayName}
+                    </p>
+                    <p className="text-xs text-moss-400/70 font-bold mt-0.5 group-hover:text-moss-400 transition-colors">
+                      {u.handle}
+                    </p>
+                  </div>
+
+                  {/* Badge "Marcar →" */}
+                  <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-[9px] font-black text-moss-400 uppercase tracking-widest bg-moss-500/15 px-3 py-1.5 rounded-full">
+                      Marcar
+                    </span>
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Comments Modal */}
       <AnimatePresence>
         {activeCommentsId && (
@@ -1013,7 +1110,11 @@ export default function Feed() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setActiveCommentsId(null)}
+              onClick={() => {
+                setActiveCommentsId(null);
+                setShowMentionList(false);
+                setMentionSuggestions([]);
+              }}
               className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md"
             />
             <motion.div
@@ -1021,7 +1122,7 @@ export default function Feed() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed bottom-0 left-0 right-0 z-[310] bg-[#0d0d0d] border-t border-white/10 rounded-t-[40px] max-h-[90vh] flex flex-col shadow-2xl p-6 pb-24 max-w-lg mx-auto"
+              className="fixed bottom-0 left-0 right-0 z-[310] bg-[#0d0d0d] border-t border-white/10 rounded-t-[40px] max-h-[90vh] flex flex-col shadow-2xl p-6 pb-6 max-w-lg mx-auto"
             >
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -1031,7 +1132,11 @@ export default function Feed() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setActiveCommentsId(null)}
+                  onClick={() => {
+                    setActiveCommentsId(null);
+                    setShowMentionList(false);
+                    setMentionSuggestions([]);
+                  }}
                   className="p-2 bg-white/5 rounded-full text-gray-400"
                 >
                   <X size={20} />
@@ -1082,7 +1187,14 @@ export default function Feed() {
                                 respondendo a <span className="underline">{comment.replyToHandle}</span>
                               </p>
                             )}
-                            <p className="text-sm text-gray-300 leading-relaxed italic">{comment.text}</p>
+                            <p className="text-sm text-gray-300 leading-relaxed italic">
+                              {comment.text.split(/(@[a-zA-Z0-9_]+)/g).map((part, i) =>
+                                /^@[a-zA-Z0-9_]+$/.test(part)
+                                  ? <Link key={i} to={`/profile/${part.slice(1)}`} onClick={() => setActiveCommentsId(null)}
+                                      className="text-moss-400 font-black not-italic hover:underline">{part}</Link>
+                                  : part
+                              )}
+                            </p>
                             {user && (
                               <button
                                 onClick={() => setReplyingTo({ commentId: comment.id, authorHandle: handleVal, authorId: commenterId, text: comment.text })}
@@ -1113,47 +1225,10 @@ export default function Feed() {
                 </div>
               )}
 
-              {/* Lista de sugestões de menção — aparece acima do input */}
-              {showMentionList && mentionSuggestions.length > 0 && (
-                <div className="bg-[#1c1c1c] border border-white/20 rounded-3xl overflow-hidden shadow-2xl mb-3">
-                  {mentionSuggestions.map((u) => (
-                    <button
-                      key={u.uid}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        const lastAt = newCommentText.lastIndexOf('@');
-                        const before = newCommentText.slice(0, lastAt);
-                        const newText = before + u.handle + ' ';
-                        setNewCommentText(newText);
-                        const editable = document.querySelector('[data-mention-input="true"]') as HTMLElement;
-                        if (editable) editable.innerText = newText;
-                        setShowMentionList(false);
-                        setMentionSuggestions([]);
-                        setMentionQuery('');
-                        try {
-                          const key = 'feedbeck_mention_history';
-                          const existing = JSON.parse(localStorage.getItem(key) || '[]');
-                          const filtered = existing.filter((h: string) => h !== u.handle);
-                          localStorage.setItem(key, JSON.stringify([u.handle, ...filtered].slice(0, 10)));
-                        } catch {}
-                      }}
-                      className="w-full flex items-center gap-5 px-6 py-5 hover:bg-white/5 active:bg-white/10 transition-colors text-left border-b border-white/10 last:border-0"
-                    >
-                      <div className="shrink-0">
-                        <UserAvatar styles={u.avatarStyles} seed={u.handle} size="lg" />
-                      </div>
-                      <div>
-                        <p className="text-base font-black text-white leading-tight">{u.displayName}</p>
-                        <p className="text-sm text-moss-400 font-bold mt-1">{u.handle}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
+              {/* Input area */}
               <div className="bg-white/5 p-4 rounded-[24px] border border-white/10 flex items-center gap-4 transition-all focus-within:border-moss-500/50">
-                <div className="w-8 h-8 rounded-lg bg-moss-900 border border-white/10 overflow-hidden shrink-0">
-                  <img src={profile?.photoURL || `https://api.dicebear.com/9.x/avataaars/svg?seed=${user?.uid}`} alt="Me" />
+                <div className="shrink-0">
+                  <UserAvatar styles={profile?.avatarStyles} seed={user?.uid} size="sm" rainbow={profile?.rainbowActive} />
                 </div>
                 <div
                   contentEditable
@@ -1207,7 +1282,7 @@ export default function Feed() {
                     }
                     if (e.key === 'Escape') { setShowMentionList(false); setMentionSuggestions([]); }
                   }}
-                  onBlur={() => { setTimeout(() => { setShowMentionList(false); setMentionSuggestions([]); }, 150); }}
+                  onBlur={() => { setTimeout(() => { setShowMentionList(false); setMentionSuggestions([]); }, 200); }}
                   className="flex-1 outline-none text-sm font-medium min-h-[20px] max-h-[80px] overflow-y-auto"
                   style={{ color: 'white', caretColor: 'white', wordBreak: 'break-word' }}
                   data-gramm="false"
