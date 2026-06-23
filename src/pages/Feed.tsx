@@ -123,6 +123,8 @@ export default function Feed() {
   // Ref do container do input para calcular posição da lista de menção
   const inputAreaRef = useRef<HTMLDivElement | null>(null);
   const [mentionListBottom, setMentionListBottom] = useState(0);
+  // Altura visível do viewport (diminui quando teclado abre)
+  const [visibleVH, setVisibleVH] = useState(window.innerHeight);
 
   // Notifications state
   const [unreadRepliesCount, setUnreadRepliesCount] = useState(0);
@@ -149,21 +151,25 @@ export default function Feed() {
     }
   };
 
-  // Calcula o bottom da lista de menção baseado na posição real do input na tela
-  const recalcMentionBottom = () => {
+  // Calcula o bottom da lista de menção e a altura visível (muda quando teclado abre)
+  const recalcViewport = () => {
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    setVisibleVH(vh);
     if (inputAreaRef.current) {
       const rect = inputAreaRef.current.getBoundingClientRect();
-      // bottom = distância do input até o final da tela (o teclado já empurrou o elemento)
       setMentionListBottom(window.innerHeight - rect.top + 8);
     }
   };
 
+  const recalcMentionBottom = recalcViewport;
+
   useEffect(() => {
-    window.visualViewport?.addEventListener('resize', recalcMentionBottom);
-    window.visualViewport?.addEventListener('scroll', recalcMentionBottom);
+    window.visualViewport?.addEventListener('resize', recalcViewport);
+    window.visualViewport?.addEventListener('scroll', recalcViewport);
+    recalcViewport();
     return () => {
-      window.visualViewport?.removeEventListener('resize', recalcMentionBottom);
-      window.visualViewport?.removeEventListener('scroll', recalcMentionBottom);
+      window.visualViewport?.removeEventListener('resize', recalcViewport);
+      window.visualViewport?.removeEventListener('scroll', recalcViewport);
     };
   }, []);
 
@@ -1037,7 +1043,7 @@ export default function Feed() {
               <div className="flex-1 h-px bg-moss-500/20" />
             </div>
 
-            <div className="bg-[#131313] border border-moss-500/20 rounded-3xl overflow-hidden shadow-2xl shadow-black/60 max-w-lg mx-auto divide-y divide-white/5">
+            <div className="bg-[#131313] border border-moss-500/20 rounded-2xl overflow-y-auto shadow-2xl shadow-black/60 max-w-lg mx-auto divide-y divide-white/5" style={{ maxHeight: 180 }}>
               {mentionSuggestions.map((u, idx) => (
                 <motion.button
                   key={u.uid}
@@ -1046,51 +1052,35 @@ export default function Feed() {
                   transition={{ delay: idx * 0.04 }}
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    const lastAt = newCommentText.lastIndexOf('@');
+                    const lastAt = newCommentText.lastIndexOf("@");
                     const before = newCommentText.slice(0, lastAt);
-                    const newText = before + u.handle + ' ';
+                    const newText = before + u.handle + " ";
                     setNewCommentText(newText);
-                    const editable = document.querySelector('[data-mention-input="true"]') as HTMLElement;
+                    const editable = document.querySelector("[data-mention-input=\"true\"]") as HTMLElement;
                     if (editable) editable.innerText = newText;
                     setShowMentionList(false);
                     setMentionSuggestions([]);
-                    setMentionQuery('');
+                    setMentionQuery("");
                     try {
-                      const key = 'feedbeck_mention_history';
-                      const existing = JSON.parse(localStorage.getItem(key) || '[]');
+                      const key = "feedbeck_mention_history";
+                      const existing = JSON.parse(localStorage.getItem(key) || "[]");
                       const filtered = existing.filter((h: string) => h !== u.handle);
                       localStorage.setItem(key, JSON.stringify([u.handle, ...filtered].slice(0, 10)));
                     } catch {}
                   }}
-                  className="w-full flex items-center gap-4 px-5 py-4 hover:bg-moss-500/10 active:bg-moss-500/20 transition-all text-left group"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-moss-500/10 active:bg-moss-500/20 transition-all text-left group"
                 >
-                  {/* Avatar com anel verde ao hover */}
                   <div className="shrink-0 relative">
-                    <div className="rounded-full p-[2px] bg-transparent group-hover:bg-moss-500/40 transition-all">
-                      <UserAvatar styles={u.avatarStyles} seed={u.handle} size="md" />
-                    </div>
-                    {/* Indicador de "vai marcar" */}
-                    <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-moss-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
-                      <span className="text-[8px] font-black text-white">@</span>
+                    <UserAvatar styles={u.avatarStyles} seed={u.handle} size="sm" />
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-moss-500 rounded-full flex items-center justify-center shadow">
+                      <span className="text-[7px] font-black text-white">@</span>
                     </div>
                   </div>
-
-                  {/* Info do usuário */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-black text-white leading-tight truncate group-hover:text-moss-300 transition-colors">
-                      {u.displayName}
-                    </p>
-                    <p className="text-xs text-moss-400/70 font-bold mt-0.5 group-hover:text-moss-400 transition-colors">
-                      {u.handle}
-                    </p>
+                    <p className="text-xs font-black text-white leading-tight truncate group-hover:text-moss-300 transition-colors">{u.displayName}</p>
+                    <p className="text-[10px] text-moss-400/70 font-bold group-hover:text-moss-400 transition-colors">{u.handle}</p>
                   </div>
-
-                  {/* Badge "Marcar →" */}
-                  <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="text-[9px] font-black text-moss-400 uppercase tracking-widest bg-moss-500/15 px-3 py-1.5 rounded-full">
-                      Marcar
-                    </span>
-                  </div>
+                  <span className="text-moss-500/40 group-hover:text-moss-400 transition-colors text-sm shrink-0">→</span>
                 </motion.button>
               ))}
             </div>
@@ -1118,7 +1108,8 @@ export default function Feed() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed bottom-0 left-0 right-0 z-[310] bg-[#0d0d0d] border-t border-white/10 rounded-t-[40px] max-h-[90vh] flex flex-col shadow-2xl p-6 pb-6 max-w-lg mx-auto"
+              style={{ maxHeight: visibleVH * 0.9 }}
+              className="fixed bottom-0 left-0 right-0 z-[310] bg-[#0d0d0d] border-t border-white/10 rounded-t-[40px] flex flex-col shadow-2xl p-6 pb-6 max-w-lg mx-auto"
             >
               <div className="flex justify-between items-center mb-6">
                 <div>
