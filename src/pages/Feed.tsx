@@ -1108,8 +1108,8 @@ export default function Feed() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              style={{ maxHeight: visibleVH * 0.9 }}
-              className="fixed bottom-0 left-0 right-0 z-[310] bg-[#0d0d0d] border-t border-white/10 rounded-t-[40px] flex flex-col shadow-2xl p-6 pb-6 max-w-lg mx-auto"
+              style={{ maxHeight: visibleVH - 80 }}
+              className="fixed bottom-[80px] left-0 right-0 z-[310] bg-[#0d0d0d] border-t border-white/10 rounded-t-[40px] flex flex-col shadow-2xl p-6 pb-4 max-w-lg mx-auto"
             >
               <div className="flex justify-between items-center mb-6">
                 <div>
