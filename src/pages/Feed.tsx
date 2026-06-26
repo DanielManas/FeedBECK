@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Bell, Star, Heart, MessageCircle, Send, X, SendHorizonal, Trash2, Pin, Play, Pause, Music, Wind, Film, IceCream, Flag, AlertTriangle, Check, Flame } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Bell, Star, Heart, MessageCircle, Send, X, Pin, Play, Pause, Music, Flag, AlertTriangle, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -8,17 +8,16 @@ import { useAuth } from '../context/AuthContext';
 import LighterButton from '../components/LighterButton';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/utils/firestore';
-import { 
-  collection, 
-  onSnapshot, 
-  query, 
-  orderBy, 
+import {
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
   where,
   or,
-  addDoc, 
-  serverTimestamp, 
-  doc, 
-  updateDoc, 
+  serverTimestamp,
+  doc,
+  updateDoc,
   increment,
   deleteDoc,
   setDoc,
@@ -28,7 +27,6 @@ import {
 import UserAvatar from '../components/UserAvatar';
 import Logo from '../components/Logo';
 import { useTutorial } from '../context/TutorialContext';
-
 
 interface Comment {
   id: string;
@@ -100,10 +98,12 @@ const CategoryBadge = ({ category }: { category: Review['category'] }) => {
 };
 
 export default function Feed() {
-  const { user, profile, isAdmin, auth, followingIds } = useAuth();
+  const { user, profile, isAdmin, followingIds } = useAuth();
   const [activeFilter, setActiveFilter] = useState<'todos' | 'larica' | 'filme' | 'brisas' | 'sons'>('todos');
   const [syncedIds, setSyncedIds] = useState<Set<string>>(new Set());
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
+  const [showSeenPosts, setShowSeenPosts] = useState(false);
   const [activeCommentsId, setActiveCommentsId] = useState<string | null>(null);
   const [commenterProfiles, setCommenterProfiles] = useState<Record<string, any>>({});
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -111,7 +111,6 @@ export default function Feed() {
   const [newCommentText, setNewCommentText] = useState('');
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; authorHandle: string; authorId: string; text: string } | null>(null);
   const [commentLoading, setCommentLoading] = useState(false);
-  const [mentionQuery, setMentionQuery] = useState('');
   const [mentionSuggestions, setMentionSuggestions] = useState<any[]>([]);
   const [showMentionList, setShowMentionList] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -119,20 +118,85 @@ export default function Feed() {
   const [reportReason, setReportReason] = useState('');
   const [reportLoading, setReportLoading] = useState(false);
   const [, setTick] = useState(0);
+  const [unreadRepliesCount, setUnreadRepliesCount] = useState(0);
+  const [playingId, setPlayingId] = useState<string | null>(null);
 
-  // Ref do container do input para calcular posição da lista de menção
   const inputAreaRef = useRef<HTMLDivElement | null>(null);
   const [mentionListBottom, setMentionListBottom] = useState(0);
-  // Altura visível do viewport (diminui quando teclado abre)
   const [visibleVH, setVisibleVH] = useState(window.innerHeight);
-
-  // Notifications state
-  const [unreadRepliesCount, setUnreadRepliesCount] = useState(0);
-
-  // Audio state
-  const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // ── IntersectionObserver para marcar posts como vistos ───────────────────
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
+
+  const markAsSeen = useCallback(async (reviewId: string) => {
+    if (!user || seenIds.has(reviewId) || reviewId === 'tutorial-post') return;
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'seen_posts', reviewId), { seenAt: serverTimestamp() });
+    } catch (_) {}
+  }, [user, seenIds]);
+
+  useEffect(() => {
+    if (!user) return;
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const id = (entry.target as HTMLElement).dataset.reviewId;
+            if (id) markAsSeen(id);
+          }
+        });
+      },
+      { threshold: 0.6 }
+    );
+    return () => { observerRef.current?.disconnect(); };
+  }, [user, markAsSeen]);
+
+  const setCardRef = useCallback((el: HTMLElement | null, reviewId: string) => {
+    if (!observerRef.current) return;
+    const existing = cardRefs.current.get(reviewId);
+    if (existing) observerRef.current.unobserve(existing);
+    if (el) {
+      cardRefs.current.set(reviewId, el);
+      observerRef.current.observe(el);
+    } else {
+      cardRefs.current.delete(reviewId);
+    }
+  }, []);
+
+  // ── Load seen posts ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user) { setSeenIds(new Set()); return; }
+    const unsub = onSnapshot(
+      query(collection(db, 'users', user.uid, 'seen_posts')),
+      (snap) => setSeenIds(new Set(snap.docs.map(d => d.id))),
+      () => {}
+    );
+    return unsub;
+  }, [user]);
+
+  // ── Viewport helpers ─────────────────────────────────────────────────────
+  const recalcViewport = () => {
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    setVisibleVH(vh);
+    if (inputAreaRef.current) {
+      const rect = inputAreaRef.current.getBoundingClientRect();
+      setMentionListBottom(window.innerHeight - rect.top + 8);
+    }
+  };
+
+  useEffect(() => {
+    window.visualViewport?.addEventListener('resize', recalcViewport);
+    window.visualViewport?.addEventListener('scroll', recalcViewport);
+    recalcViewport();
+    return () => {
+      window.visualViewport?.removeEventListener('resize', recalcViewport);
+      window.visualViewport?.removeEventListener('scroll', recalcViewport);
+    };
+  }, []);
+
+  // ── Audio ────────────────────────────────────────────────────────────────
   const togglePlayback = (id: string, url: string) => {
     if (playingId === id) {
       audioRef.current?.pause();
@@ -151,28 +215,9 @@ export default function Feed() {
     }
   };
 
-  // Calcula o bottom da lista de menção e a altura visível (muda quando teclado abre)
-  const recalcViewport = () => {
-    const vh = window.visualViewport?.height ?? window.innerHeight;
-    setVisibleVH(vh);
-    if (inputAreaRef.current) {
-      const rect = inputAreaRef.current.getBoundingClientRect();
-      setMentionListBottom(window.innerHeight - rect.top + 8);
-    }
-  };
+  useEffect(() => { return () => { audioRef.current?.pause(); }; }, []);
 
-  const recalcMentionBottom = recalcViewport;
-
-  useEffect(() => {
-    window.visualViewport?.addEventListener('resize', recalcViewport);
-    window.visualViewport?.addEventListener('scroll', recalcViewport);
-    recalcViewport();
-    return () => {
-      window.visualViewport?.removeEventListener('resize', recalcViewport);
-      window.visualViewport?.removeEventListener('scroll', recalcViewport);
-    };
-  }, []);
-
+  // ── Denúncia ─────────────────────────────────────────────────────────────
   const handleReport = async () => {
     if (!reportModal || !reportReason.trim() || !user) return;
     setReportLoading(true);
@@ -200,181 +245,109 @@ export default function Feed() {
     }
   };
 
-  useEffect(() => {
-    return () => {
-      audioRef.current?.pause();
-    };
-  }, []);
-
-  const ME_AVATAR = profile?.photoURL || `https://api.dicebear.com/9.x/avataaars/svg?seed=${user?.uid}`;
   const ME_HANDLE = profile?.handle || '@anonimo';
 
+  // ── Load reviews ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) {
-      const q = query(
-        collection(db, 'reviews'), 
-        where('isPrivate', '==', false),
-        orderBy('createdAt', 'desc')
-      );
+      const q = query(collection(db, 'reviews'), where('isPrivate', '==', false), orderBy('createdAt', 'desc'));
       return onSnapshot(q, (snapshot) => {
-        const docs = snapshot.docs.map(doc => {
-          const data = doc.data();
+        setReviews(snapshot.docs.map(d => {
+          const data = d.data();
           return {
-            id: doc.id,
-            ...data,
+            id: d.id, ...data,
             userName: data.authorName || data.userName || 'Usuário',
             userHandle: data.authorHandle || data.userHandle || '@anonimo',
             authorAvatarStyles: data.authorAvatarStyles || data.userAvatarStyles,
             authorRainbowActive: data.authorRainbowActive,
             timestamp: data.createdAt?.toDate() || new Date()
           } as Review;
-        }).filter(r => r.userHandle !== '@anonimo');
-        setReviews(docs);
+        }).filter(r => r.userHandle !== '@anonimo'));
       });
     }
 
     const limitedFollowingIds = followingIds.slice(0, 28);
-    
-    let q;
-    if (limitedFollowingIds.length > 0) {
-      q = query(
-        collection(db, 'reviews'),
-        or(
+    const q = limitedFollowingIds.length > 0
+      ? query(collection(db, 'reviews'), or(
           where('isPrivate', '==', false),
           where('authorId', '==', user.uid),
           where('authorId', 'in', limitedFollowingIds)
-        ),
-        orderBy('createdAt', 'desc')
-      );
-    } else {
-      q = query(
-        collection(db, 'reviews'),
-        or(
+        ), orderBy('createdAt', 'desc'))
+      : query(collection(db, 'reviews'), or(
           where('isPrivate', '==', false),
           where('authorId', '==', user.uid)
-        ),
-        orderBy('createdAt', 'desc')
-      );
-    }
+        ), orderBy('createdAt', 'desc'));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => {
-        const data = doc.data();
+    return onSnapshot(q, (snapshot) => {
+      setReviews(snapshot.docs.map(d => {
+        const data = d.data();
         return {
-          id: doc.id,
-          ...data,
+          id: d.id, ...data,
           userName: data.authorName || data.userName || 'Usuário',
           userHandle: data.authorHandle || data.userHandle || '@anonimo',
           authorAvatarStyles: data.authorAvatarStyles || data.userAvatarStyles,
           authorRainbowActive: data.authorRainbowActive,
           timestamp: data.createdAt?.toDate() || new Date()
         } as Review;
-      }).filter(r => r.userHandle !== '@anonimo' || r.authorId === user.uid);
-      setReviews(docs);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'reviews');
-    });
-    return unsubscribe;
+      }).filter(r => r.userHandle !== '@anonimo' || r.authorId === user.uid));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'reviews'));
   }, [user, followingIds]);
 
   useEffect(() => {
-    if (!user) {
-      setSyncedIds(new Set());
-      return;
-    }
-    const q = query(collection(db, 'users', user.uid, 'sintonias'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setSyncedIds(new Set(snapshot.docs.map(doc => doc.id)));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/sintonias`);
-    });
-    return unsubscribe;
+    if (!user) { setSyncedIds(new Set()); return; }
+    return onSnapshot(query(collection(db, 'users', user.uid, 'sintonias')),
+      (snap) => setSyncedIds(new Set(snap.docs.map(d => d.id))),
+      (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/sintonias`));
   }, [user]);
 
   useEffect(() => {
-    if (!user) {
-      setSavedIds(new Set());
-      return;
-    }
-    const q = query(collection(db, 'users', user.uid, 'saved_posts'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setSavedIds(new Set(snapshot.docs.map(doc => doc.id)));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/saved_posts`);
-    });
-    return unsubscribe;
+    if (!user) { setSavedIds(new Set()); return; }
+    return onSnapshot(query(collection(db, 'users', user.uid, 'saved_posts')),
+      (snap) => setSavedIds(new Set(snap.docs.map(d => d.id))),
+      (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/saved_posts`));
   }, [user]);
 
-  // Real-time unread notifications
   useEffect(() => {
-    if (!user) {
-      setUnreadRepliesCount(0);
-      return;
-    }
-
-    const q = query(
-      collection(db, 'notifications'),
-      where('receiverId', '==', user.uid),
-      where('read', '==', false)
+    if (!user) { setUnreadRepliesCount(0); return; }
+    return onSnapshot(
+      query(collection(db, 'notifications'), where('receiverId', '==', user.uid), where('read', '==', false)),
+      (snap) => setUnreadRepliesCount(snap.size),
+      () => {}
     );
-
-    const unsubscribe = onSnapshot(q, (snap) => {
-      setUnreadRepliesCount(snap.size);
-    }, (error) => {
-      console.error('Error loading unread notifications:', error);
-    });
-
-    return unsubscribe;
   }, [user]);
 
   const [commenterUserIds, setCommenterUserIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!activeCommentsId) {
-      setComments([]);
-      setCommenterUserIds([]);
-      return;
-    }
-    const q = query(
-      collection(db, 'reviews', activeCommentsId, 'comments'), 
-      orderBy('createdAt', 'desc')
+    if (!activeCommentsId) { setComments([]); setCommenterUserIds([]); return; }
+    return onSnapshot(
+      query(collection(db, 'reviews', activeCommentsId, 'comments'), orderBy('createdAt', 'desc')),
+      (snapshot) => {
+        const fetched = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Comment));
+        setComments(fetched);
+        setCommenterUserIds(fetched.map((c: any) => c.userId || c.authorId).filter(Boolean));
+        const currentReview = reviews.find(r => r.id === activeCommentsId);
+        if (currentReview && currentReview.commentsCount !== snapshot.size) {
+          updateDoc(doc(db, 'reviews', activeCommentsId), { commentsCount: snapshot.size })
+            .catch(err => handleFirestoreError(err, OperationType.UPDATE, `reviews/${activeCommentsId}`));
+        }
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, `reviews/${activeCommentsId}/comments`)
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
-      setComments(fetchedComments);
-      setCommenterUserIds(fetchedComments.map((c: any) => c.userId || c.authorId).filter(Boolean));
-
-      const currentReview = reviews.find(r => r.id === activeCommentsId);
-      if (currentReview && currentReview.commentsCount !== snapshot.size) {
-        updateDoc(doc(db, 'reviews', activeCommentsId), {
-          commentsCount: snapshot.size
-        }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `reviews/${activeCommentsId}`));
-      }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `reviews/${activeCommentsId}/comments`);
-    });
-    return unsubscribe;
   }, [activeCommentsId, reviews]);
 
   useEffect(() => {
     const uniqueIds = Array.from(new Set(commenterUserIds)).slice(0, 30);
-    if (uniqueIds.length === 0) {
-      setCommenterProfiles({});
-      return;
-    }
-
-    const usersQ = query(collection(db, 'users'), where('__name__', 'in', uniqueIds));
-    const unsubscribe = onSnapshot(usersQ, (userSnap) => {
-      const profiles: Record<string, any> = {};
-      userSnap.docs.forEach(d => {
-        profiles[d.id] = d.data();
-      });
-      setCommenterProfiles(prev => ({ ...prev, ...profiles }));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'users_for_comments');
-    });
-
-    return unsubscribe;
+    if (uniqueIds.length === 0) { setCommenterProfiles({}); return; }
+    return onSnapshot(
+      query(collection(db, 'users'), where('__name__', 'in', uniqueIds)),
+      (snap) => {
+        const profiles: Record<string, any> = {};
+        snap.docs.forEach(d => { profiles[d.id] = d.data(); });
+        setCommenterProfiles(prev => ({ ...prev, ...profiles }));
+      },
+      (err) => handleFirestoreError(err, OperationType.GET, 'users_for_comments')
+    );
   }, [commenterUserIds]);
 
   useEffect(() => {
@@ -382,99 +355,54 @@ export default function Feed() {
     return () => clearInterval(timer);
   }, []);
 
+  // ── Ações ────────────────────────────────────────────────────────────────
   const toggleSync = async (reviewId: string, authorId: string) => {
     if (!user) return;
-    
     try {
       const docRef = doc(db, 'reviews', reviewId);
       const userLikeRef = doc(db, 'users', user.uid, 'sintonias', reviewId);
-      
       if (!syncedIds.has(reviewId)) {
         await setDoc(userLikeRef, { createdAt: serverTimestamp() });
-        
-        try {
-          await updateDoc(docRef, { sintonias: increment(1) });
-        } catch (err) {
-          console.error('Error updating review sintonias count:', err);
-        }
-
-        if (authorId) {
-          try {
-            await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(1) });
-          } catch (err) {
-            console.error('Error updating profile totalSintonias:', err);
-          }
-        }
-
-        // Notificação de like_post
+        try { await updateDoc(docRef, { sintonias: increment(1) }); } catch (_) {}
+        if (authorId) { try { await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(1) }); } catch (_) {} }
         if (authorId && authorId !== user.uid) {
           try {
             const likedReview = reviews.find(r => r.id === reviewId);
-            const likeNotifRef = doc(collection(db, 'notifications'));
-            await setDoc(likeNotifRef, {
-              id: likeNotifRef.id,
-              type: 'like_post',
-              senderId: user.uid,
-              senderHandle: profile?.handle || '@usuario',
+            const ref = doc(collection(db, 'notifications'));
+            await setDoc(ref, {
+              id: ref.id, type: 'like_post',
+              senderId: user.uid, senderHandle: profile?.handle || '@usuario',
               senderName: profile?.displayName || 'Usuário',
               senderAvatarStyles: profile?.avatarStyles || null,
-              receiverId: authorId,
-              reviewId: reviewId,
+              receiverId: authorId, reviewId,
               reviewTitle: likedReview?.title || '',
-              commentId: '',
-              commentText: '',
-              parentCommentText: '',
-              read: false,
-              createdAt: serverTimestamp()
+              commentId: '', commentText: '', parentCommentText: '',
+              read: false, createdAt: serverTimestamp()
             });
-          } catch (likeNotifErr) {
-            console.warn('Like notification error:', likeNotifErr);
-          }
+          } catch (_) {}
         }
       } else {
         await deleteDoc(userLikeRef);
-        
-        try {
-          await updateDoc(docRef, { sintonias: increment(-1) });
-        } catch (err) {
-          console.error('Error decrementing review sintonias count:', err);
-        }
-
-        if (authorId) {
-          try {
-            await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(-1) });
-          } catch (err) {
-            console.error('Error decrementing profile totalSintonias:', err);
-          }
-        }
+        try { await updateDoc(docRef, { sintonias: increment(-1) }); } catch (_) {}
+        if (authorId) { try { await updateDoc(doc(db, 'users', authorId), { totalSintonias: increment(-1) }); } catch (_) {} }
       }
-    } catch (err) {
-      console.error('Error toggling sintonia:', err);
-    }
+    } catch (err) { console.error('Error toggling sintonia:', err); }
   };
 
   const toggleSave = async (reviewId: string) => {
     if (!user) return;
-    
     try {
-      const userSaveRef = doc(db, 'users', user.uid, 'saved_posts', reviewId);
-      
+      const ref = doc(db, 'users', user.uid, 'saved_posts', reviewId);
       if (!savedIds.has(reviewId)) {
-        await setDoc(userSaveRef, { 
-          reviewId,
-          savedAt: serverTimestamp() 
-        });
+        await setDoc(ref, { reviewId, savedAt: serverTimestamp() });
       } else {
-        await deleteDoc(userSaveRef);
+        await deleteDoc(ref);
       }
-    } catch (err) {
-      console.error('Error toggling save:', err);
-    }
+    } catch (err) { console.error('Error toggling save:', err); }
   };
 
   const handleAddComment = async () => {
     if (!activeCommentsId || !newCommentText.trim() || !user) return;
-
     const textToSend = newCommentText.trim();
     const replyingToSnapshot = replyingTo;
     const currentReview = reviews.find(r => r.id === activeCommentsId);
@@ -486,7 +414,6 @@ export default function Feed() {
     setCommentLoading(true);
 
     try {
-      const reviewRef = doc(db, 'reviews', activeCommentsId);
       const commentColl = collection(db, 'reviews', activeCommentsId, 'comments');
       const newCommentDoc = doc(commentColl);
       const commentId = newCommentDoc.id;
@@ -508,94 +435,60 @@ export default function Feed() {
       }
 
       await setDoc(newCommentDoc, commentData);
-
-      await updateDoc(reviewRef, {
-        commentsCount: increment(1)
-      });
+      await updateDoc(doc(db, 'reviews', activeCommentsId), { commentsCount: increment(1) });
 
       try {
         const senderAvatarStyles = profile?.avatarStyles || null;
         const reviewTitle = currentReview?.title || '';
-
         const mentionMatches = textToSend.match(/@[a-z0-9_]+/g) || [];
 
         if (replyingToSnapshot && replyingToSnapshot.authorId !== user.uid) {
-          const notificationRef = doc(collection(db, 'notifications'));
-          await setDoc(notificationRef, {
-            id: notificationRef.id,
-            type: 'reply',
-            senderId: user.uid,
-            senderHandle: profile?.handle || '@usuario',
-            senderName: profile?.displayName || 'Usuário',
-            senderAvatarStyles,
+          const ref = doc(collection(db, 'notifications'));
+          await setDoc(ref, {
+            id: ref.id, type: 'reply',
+            senderId: user.uid, senderHandle: profile?.handle || '@usuario',
+            senderName: profile?.displayName || 'Usuário', senderAvatarStyles,
             receiverId: replyingToSnapshot.authorId,
-            reviewId: activeCommentsId,
-            reviewTitle,
-            commentId: commentId,
-            commentText: textToSend,
-            parentCommentText: replyingToSnapshot.text,
-            read: false,
-            createdAt: serverTimestamp()
+            reviewId: activeCommentsId, reviewTitle, commentId,
+            commentText: textToSend, parentCommentText: replyingToSnapshot.text,
+            read: false, createdAt: serverTimestamp()
           });
         }
 
         if (currentReview && currentReview.authorId !== user.uid) {
-          const postNotifRef = doc(collection(db, 'notifications'));
-          await setDoc(postNotifRef, {
-            id: postNotifRef.id,
-            type: 'comment_post',
-            senderId: user.uid,
-            senderHandle: profile?.handle || '@usuario',
-            senderName: profile?.displayName || 'Usuário',
-            senderAvatarStyles,
+          const ref = doc(collection(db, 'notifications'));
+          await setDoc(ref, {
+            id: ref.id, type: 'comment_post',
+            senderId: user.uid, senderHandle: profile?.handle || '@usuario',
+            senderName: profile?.displayName || 'Usuário', senderAvatarStyles,
             receiverId: currentReview.authorId,
-            reviewId: activeCommentsId,
-            reviewTitle,
-            commentId: commentId,
-            commentText: textToSend,
-            parentCommentText: '',
-            read: false,
-            createdAt: serverTimestamp()
+            reviewId: activeCommentsId, reviewTitle, commentId,
+            commentText: textToSend, parentCommentText: '',
+            read: false, createdAt: serverTimestamp()
           });
         }
 
-        if (mentionMatches.length > 0) {
-          const mentionedHandles = [...new Set(mentionMatches)];
-          for (const mentionHandle of mentionedHandles) {
-            try {
-              const mentionQ = query(collection(db, 'users'), where('handle', '==', mentionHandle));
-              const mentionSnap = await getDocs(mentionQ);
-              if (!mentionSnap.empty) {
-                const mentionedUser = mentionSnap.docs[0].data();
-                if (mentionedUser.uid !== user.uid) {
-                  const mentionRef = doc(collection(db, 'notifications'));
-                  await setDoc(mentionRef, {
-                    id: mentionRef.id,
-                    type: 'mention',
-                    senderId: user.uid,
-                    senderHandle: profile?.handle || '@usuario',
-                    senderName: profile?.displayName || 'Usuário',
-                    senderAvatarStyles,
-                    receiverId: mentionedUser.uid,
-                    reviewId: activeCommentsId,
-                    reviewTitle,
-                    commentId: commentId,
-                    commentText: textToSend,
-                    parentCommentText: '',
-                    read: false,
-                    createdAt: serverTimestamp()
-                  });
-                }
+        for (const mentionHandle of [...new Set(mentionMatches)]) {
+          try {
+            const snap = await getDocs(query(collection(db, 'users'), where('handle', '==', mentionHandle)));
+            if (!snap.empty) {
+              const mentionedUser = snap.docs[0].data();
+              if (mentionedUser.uid !== user.uid) {
+                const ref = doc(collection(db, 'notifications'));
+                await setDoc(ref, {
+                  id: ref.id, type: 'mention',
+                  senderId: user.uid, senderHandle: profile?.handle || '@usuario',
+                  senderName: profile?.displayName || 'Usuário', senderAvatarStyles,
+                  receiverId: mentionedUser.uid,
+                  reviewId: activeCommentsId, reviewTitle, commentId,
+                  commentText: textToSend, parentCommentText: '',
+                  read: false, createdAt: serverTimestamp()
+                });
               }
-            } catch (mentionErr) {
-              console.warn('Mention lookup error:', mentionErr);
             }
-          }
+          } catch (_) {}
         }
-      } catch (notifErr) {
-        console.error('FEEDBECK NOTIF ERROR:', notifErr);
-      }
-
+      } catch (err) { console.error('FEEDBECK NOTIF ERROR:', err); }
     } catch (err) {
       console.error('Error adding comment:', err);
       setNewCommentText(textToSend);
@@ -608,25 +501,16 @@ export default function Feed() {
     if (!activeCommentsId) return;
     try {
       await deleteDoc(doc(db, 'reviews', activeCommentsId, 'comments', commentId));
-      await updateDoc(doc(db, 'reviews', activeCommentsId), {
-        commentsCount: increment(-1)
-      });
-    } catch (err) {
-      console.error('Error deleting comment:', err);
-    }
+      await updateDoc(doc(db, 'reviews', activeCommentsId), { commentsCount: increment(-1) });
+    } catch (err) { console.error('Error deleting comment:', err); }
   };
 
   const deleteReview = async (id: string) => {
     setIsDeleting(null);
-    try {
-      await deleteDoc(doc(db, 'reviews', id));
-    } catch (err) {
-      console.error('Delete error:', err);
-    }
+    try { await deleteDoc(doc(db, 'reviews', id)); } catch (err) { console.error('Delete error:', err); }
   };
 
-  const activeReview = reviews.find(r => r.id === activeCommentsId);
-
+  // ── Tutorial post ────────────────────────────────────────────────────────
   const { isActive: showTutorial } = useTutorial();
 
   const tutorialPost: Review | null = showTutorial ? {
@@ -642,25 +526,40 @@ export default function Feed() {
     sintonias: 42,
     commentsCount: 7,
     authorAvatarStyles: {
-      top: 'shaggy',
-      topColor: '2c1b18',
-      facialHair: 'blank',
-      skinColor: 'ffdbac',
-      clothingColor: '3c4f5e',
-      eyes: 'default',
-      mouth: 'default',
-      glasses: 'blank',
-      clothes: 'shirtCrewNeck'
+      top: 'shaggy', topColor: '2c1b18', facialHair: 'blank',
+      skinColor: 'ffdbac', clothingColor: '3c4f5e',
+      eyes: 'default', mouth: 'default', glasses: 'blank', clothes: 'shirtCrewNeck'
     },
     images: ['https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&q=80&w=800']
   } : null;
 
+  // ── Smart feed ───────────────────────────────────────────────────────────
+  const getSmartFeed = (): Review[] => {
+    if (showTutorial) return tutorialPost ? [tutorialPost] : [];
+
+    const filtered = activeFilter === 'todos'
+      ? reviews
+      : reviews.filter(r => r.category === activeFilter);
+
+    if (!user) return filtered;
+
+    const unseen = filtered.filter(r => !seenIds.has(r.id));
+    const seen = filtered.filter(r => seenIds.has(r.id));
+
+    const unseenFollowing = unseen.filter(r => followingIds.includes(r.authorId));
+    const unseenOthers = unseen.filter(r => !followingIds.includes(r.authorId));
+
+    if (showSeenPosts) return [...unseenFollowing, ...unseenOthers, ...seen];
+    return [...unseenFollowing, ...unseenOthers];
+  };
+
+  const displayReviews = getSmartFeed();
+  const seenCount = reviews.filter(r =>
+    seenIds.has(r.id) && (activeFilter === 'todos' || r.category === activeFilter)
+  ).length;
+
   const notificationCount = unreadRepliesCount;
   const hasNotifications = notificationCount > 0;
-
-  const displayReviews = showTutorial 
-    ? (tutorialPost ? [tutorialPost] : []) 
-    : (activeFilter === 'todos' ? reviews : reviews.filter(r => r.category === activeFilter));
 
   const filterOptions = [
     { id: 'todos', label: 'Todos' },
@@ -670,49 +569,49 @@ export default function Feed() {
     { id: 'sons', label: 'Sons' }
   ];
 
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="p-6 pt-12 pb-24">
       <header className="mb-6">
-                <div className="flex justify-between items-start">
-                  <div id="tutorial-welcome">
-                    <div className="flex items-center gap-3">
-                      <Logo size={42} showText />
-                      {isAdmin && (
-                        <span className="bg-red-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-lg shadow-red-900/40">Admin</span>
-                      )}
-                    </div>
-                    <p className="text-gray-500 text-[10px] mt-2 uppercase tracking-[0.2em] font-bold">Relatos da Brisa</p>
-                  </div>
-                  
-                  <div className="flex items-center gap-4 shrink-0">
-                    <Link 
-                      to="/notifications"
-                      className="relative p-1.5 rounded-xl hover:bg-white/5 transition-all outline-none flex items-center justify-center"
-                      title="Sintonias e Notificações"
-                    >
-                      <LighterButton hasFlame={hasNotifications} count={notificationCount} />
-                    </Link>
+        <div className="flex justify-between items-start">
+          <div id="tutorial-welcome">
+            <div className="flex items-center gap-3">
+              <Logo size={42} showText />
+              {isAdmin && (
+                <span className="bg-red-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-lg shadow-red-900/40">Admin</span>
+              )}
+            </div>
+            <p className="text-gray-500 text-[10px] mt-2 uppercase tracking-[0.2em] font-bold">Relatos da Brisa</p>
+          </div>
 
-                    <div className="flex flex-col items-center gap-1.5 shrink-0">
-                      <UserAvatar 
-                        styles={profile?.avatarStyles} 
-                        seed={user?.uid} 
-                        size="lg" 
-                        rainbow={profile?.rainbowActive}
-                      />
+          <div className="flex items-center gap-4 shrink-0">
+            <Link
+              to="/notifications"
+              className="relative p-1.5 rounded-xl hover:bg-white/5 transition-all outline-none flex items-center justify-center"
+              title="Sintonias e Notificações"
+            >
+              <LighterButton hasFlame={hasNotifications} count={notificationCount} />
+            </Link>
 
-                      <Link to={`/profile/${ME_HANDLE.replace('@', '')}`}>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-moss-500/60 hover:text-moss-400 transition-colors">
-                          {ME_HANDLE}
-                        </span>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
+            <div className="flex flex-col items-center gap-1.5 shrink-0">
+              <UserAvatar
+                styles={profile?.avatarStyles}
+                seed={user?.uid}
+                size="lg"
+                rainbow={profile?.rainbowActive}
+              />
+              <Link to={`/profile/${ME_HANDLE.replace('@', '')}`}>
+                <span className="text-[9px] font-black uppercase tracking-widest text-moss-500/60 hover:text-moss-400 transition-colors">
+                  {ME_HANDLE}
+                </span>
+              </Link>
+            </div>
+          </div>
+        </div>
       </header>
 
       {/* Filter Buttons */}
-      <div className="flex flex-wrap gap-2 mb-8">
+      <div className="flex flex-wrap gap-2 mb-4">
         {filterOptions.map((opt) => (
           <button
             key={opt.id}
@@ -732,218 +631,234 @@ export default function Feed() {
         ))}
       </div>
 
+      {/* Banner "mostrar posts vistos" */}
+      {!showTutorial && user && seenCount > 0 && !showSeenPosts && (
+        <motion.button
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          onClick={() => setShowSeenPosts(true)}
+          className="w-full mb-6 py-3 px-5 glass rounded-2xl border border-white/5 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-moss-400 hover:border-moss-500/20 transition-all flex items-center justify-center gap-2"
+        >
+          <span className="w-5 h-5 bg-white/5 rounded-full flex items-center justify-center text-[9px]">{seenCount}</span>
+          Mostrar posts já vistos
+        </motion.button>
+      )}
+      {!showTutorial && user && showSeenPosts && (
+        <motion.button
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onClick={() => setShowSeenPosts(false)}
+          className="w-full mb-6 py-3 px-5 glass rounded-2xl border border-moss-500/20 text-[10px] font-black uppercase tracking-widest text-moss-400 hover:text-white transition-all flex items-center justify-center gap-2"
+        >
+          Ocultar posts já vistos
+        </motion.button>
+      )}
+
       <section className="space-y-6">
         {displayReviews.length > 0 ? (
-          displayReviews.map((review) => (
-            <motion.div 
-              layout
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              key={review.id} 
-              id={review.id === 'tutorial-post' ? 'tutorial-post-card' : undefined}
-              className={`glass-card p-6 shadow-xl shadow-black/20 overflow-hidden relative border-t-4 transition-all ${
-                review.category === 'sons' ? 'border-indigo-500/50 shadow-indigo-900/10' : 'border-transparent'
-              }`}
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div id={review.id === 'tutorial-post' ? 'tutorial-post-author' : undefined} className="flex items-center gap-3">
-                  <UserAvatar 
-                    styles={review.userHandle === ME_HANDLE ? profile?.avatarStyles : review.authorAvatarStyles} 
-                    seed={review.userHandle} 
-                    size="md" 
-                    rainbow={review.userHandle === ME_HANDLE ? profile?.rainbowActive : review.authorRainbowActive}
-                  />
-                  <div>
-                    <Link to={`/profile/${review.userHandle}`}>
-                      <span className="text-sm font-bold text-gray-300 block leading-tight hover:text-white transition-colors">
-                        {review.userName}
-                      </span>
-                      <span className="text-[10px] text-moss-400 font-bold uppercase tracking-widest block hover:underline">
-                        {review.userHandle}
-                      </span>
-                    </Link>
-                    <span className="text-[9px] text-gray-600 font-bold uppercase tracking-tighter mt-1 block">{formatRelativeTime(review.timestamp)}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {(isAdmin || user?.uid === review.authorId) && (
-                    <button 
-                      onClick={() => setIsDeleting(review.id)}
-                      className="p-2 text-gray-600 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                  <div id={review.id === 'tutorial-post' ? 'tutorial-post-category' : undefined}>
-                    <CategoryBadge category={review.category} />
-                  </div>
-                </div>
-              </div>
-
-              <h2 
-                id={review.id === 'tutorial-post' ? 'tutorial-post-title' : undefined}
-                className={`text-xl font-bold mt-2 leading-tight ${
-                  review.id === 'tutorial-post' 
-                    ? 'text-moss-400 animate-pulse drop-shadow-[0_0_15px_rgba(74,222,128,1)] scale-[1.02] transition-transform' 
-                    : 'text-white'
-                }`}
+          displayReviews.map((review) => {
+            const isSeen = seenIds.has(review.id);
+            return (
+              <motion.div
+                layout
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                key={review.id}
+                id={review.id === 'tutorial-post' ? 'tutorial-post-card' : undefined}
+                data-review-id={review.id}
+                ref={(el) => setCardRef(el, review.id)}
+                className={`glass-card p-6 shadow-xl shadow-black/20 overflow-hidden relative border-t-4 transition-all ${
+                  review.category === 'sons' ? 'border-indigo-500/50 shadow-indigo-900/10' : 'border-transparent'
+                } ${isSeen && showSeenPosts ? 'opacity-50' : ''}`}
               >
-                {review.title}
-              </h2>
+                {/* Badge "já visto" */}
+                {isSeen && showSeenPosts && (
+                  <div className="absolute top-3 right-16 z-10 px-2 py-0.5 bg-white/5 rounded-full border border-white/5">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-gray-600">Visto</span>
+                  </div>
+                )}
 
-              {/* Music Player Block */}
-              {review.category === 'sons' && review.musicData && (
-                <div className="mt-4 bg-indigo-500/5 border border-indigo-500/20 rounded-[28px] p-4 flex items-center gap-4 relative overflow-hidden group">
-                  <div className="absolute inset-0 bg-indigo-500/5 blur-3xl -z-10" />
-                  <div className="relative shrink-0">
-                    {review.musicData.artworkUrl === 'placeholder:sons' ? (
-                      <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center shadow-lg border border-white/20">
-                        <Music size={28} className="text-white/80" />
-                      </div>
-                    ) : (
-                      <img src={review.musicData.artworkUrl} className="w-16 h-16 rounded-xl shadow-lg border border-white/10" alt="" />
-                    )}
-                    {review.musicData.previewUrl && (
-                      <button 
-                        onClick={() => review.musicData && togglePlayback(review.id, review.musicData.previewUrl)}
-                        className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/60 transition-all rounded-xl"
-                      >
-                        {playingId === review.id ? <Pause size={24} className="text-white animate-pulse" /> : <Play size={24} className="text-white ml-0.5" />}
+                <div className="flex justify-between items-start mb-4">
+                  <div id={review.id === 'tutorial-post' ? 'tutorial-post-author' : undefined} className="flex items-center gap-3">
+                    <UserAvatar
+                      styles={review.userHandle === ME_HANDLE ? profile?.avatarStyles : review.authorAvatarStyles}
+                      seed={review.userHandle}
+                      size="md"
+                      rainbow={review.userHandle === ME_HANDLE ? profile?.rainbowActive : review.authorRainbowActive}
+                    />
+                    <div>
+                      <Link to={`/profile/${review.userHandle}`}>
+                        <span className="text-sm font-bold text-gray-300 block leading-tight hover:text-white transition-colors">
+                          {review.userName}
+                        </span>
+                        <span className="text-[10px] text-moss-400 font-bold uppercase tracking-widest block hover:underline">
+                          {review.userHandle}
+                        </span>
+                      </Link>
+                      <span className="text-[9px] text-gray-600 font-bold uppercase tracking-tighter mt-1 block">{formatRelativeTime(review.timestamp)}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {(isAdmin || user?.uid === review.authorId) && (
+                      <button onClick={() => setIsDeleting(review.id)} className="p-2 text-gray-600 hover:text-red-500 transition-colors">
+                        <Trash2 size={16} />
                       </button>
                     )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">
-                      {review.musicData.previewUrl ? 'Ouvindo agora' : 'Som Recomendado'}
-                    </p>
-                    <p className="text-lg font-black text-white truncate uppercase tracking-tighter leading-tight">
-                      <span className="text-indigo-400/50">Música:</span> {review.musicData.trackName}
-                    </p>
-                    <p className="text-xs text-white/50 font-bold truncate uppercase tracking-widest mt-1">
-                      <span className="text-indigo-400/30">Artista:</span> {review.musicData.artistName}
-                    </p>
+                    <div id={review.id === 'tutorial-post' ? 'tutorial-post-category' : undefined}>
+                      <CategoryBadge category={review.category} />
+                    </div>
                   </div>
                 </div>
-              )}
-              
-              {/* Image Carousel */}
-              {review.images && review.images.length > 0 && (
-                <div 
-                  id={review.id === 'tutorial-post' ? 'tutorial-post-content' : undefined}
-                  className="mt-4 -mx-6"
+
+                <h2
+                  id={review.id === 'tutorial-post' ? 'tutorial-post-title' : undefined}
+                  className={`text-xl font-bold mt-2 leading-tight ${
+                    review.id === 'tutorial-post'
+                      ? 'text-moss-400 animate-pulse drop-shadow-[0_0_15px_rgba(74,222,128,1)] scale-[1.02] transition-transform'
+                      : 'text-white'
+                  }`}
                 >
-                  <div className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar gap-2 px-6">
-                    {review.images.map((img, idx) => (
-                      <div key={idx} className="flex-shrink-0 w-[85%] aspect-square snap-center rounded-2xl overflow-hidden shadow-2xl relative bg-black/40">
-                        <img src={img} alt={`Post ${idx}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      </div>
-                    ))}
+                  {review.title}
+                </h2>
+
+                {/* Music Player */}
+                {review.category === 'sons' && review.musicData && (
+                  <div className="mt-4 bg-indigo-500/5 border border-indigo-500/20 rounded-[28px] p-4 flex items-center gap-4 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-indigo-500/5 blur-3xl -z-10" />
+                    <div className="relative shrink-0">
+                      {review.musicData.artworkUrl === 'placeholder:sons' ? (
+                        <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center shadow-lg border border-white/20">
+                          <Music size={28} className="text-white/80" />
+                        </div>
+                      ) : (
+                        <img src={review.musicData.artworkUrl} className="w-16 h-16 rounded-xl shadow-lg border border-white/10" alt="" />
+                      )}
+                      {review.musicData.previewUrl && (
+                        <button
+                          onClick={() => review.musicData && togglePlayback(review.id, review.musicData.previewUrl)}
+                          className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/60 transition-all rounded-xl"
+                        >
+                          {playingId === review.id ? <Pause size={24} className="text-white animate-pulse" /> : <Play size={24} className="text-white ml-0.5" />}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">
+                        {review.musicData.previewUrl ? 'Ouvindo agora' : 'Som Recomendado'}
+                      </p>
+                      <p className="text-lg font-black text-white truncate uppercase tracking-tighter leading-tight">
+                        <span className="text-indigo-400/50">Música:</span> {review.musicData.trackName}
+                      </p>
+                      <p className="text-xs text-white/50 font-bold truncate uppercase tracking-widest mt-1">
+                        <span className="text-indigo-400/30">Artista:</span> {review.musicData.artistName}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <p className="text-gray-400 text-sm mt-3 leading-relaxed font-light italic">
-                {review.content}
-              </p>
+                {/* Image Carousel */}
+                {review.images && review.images.length > 0 && (
+                  <div id={review.id === 'tutorial-post' ? 'tutorial-post-content' : undefined} className="mt-4 -mx-6">
+                    <div className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar gap-2 px-6">
+                      {review.images.map((img, idx) => (
+                        <div key={idx} className="flex-shrink-0 w-[85%] aspect-square snap-center rounded-2xl overflow-hidden shadow-2xl relative bg-black/40">
+                          <img src={img} alt={`Post ${idx}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-              <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-4">
-                <div className="flex items-center gap-5">
-                  <button 
-                    id={review.id === 'tutorial-post' ? 'tutorial-post-like-button' : undefined}
-                    onClick={() => toggleSync(review.id, review.authorId || review.userId)}
-                    className={`flex items-center gap-2 transition-all p-1.5 -m-1.5 rounded-xl ${
-                      syncedIds.has(review.id) ? 'text-moss-400' : 'text-gray-600 hover:text-moss-400'
-                    }`}
-                  >
-                    <Heart size={18} className={syncedIds.has(review.id) ? 'fill-current' : ''} />
-                    <span className="text-[10px] font-black uppercase tracking-tighter">
-                      {review.sintonias}
-                    </span>
-                  </button>
-                    <button 
+                <p className="text-gray-400 text-sm mt-3 leading-relaxed font-light italic">{review.content}</p>
+
+                <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-4">
+                  <div className="flex items-center gap-5">
+                    <button
+                      id={review.id === 'tutorial-post' ? 'tutorial-post-like-button' : undefined}
+                      onClick={() => toggleSync(review.id, review.authorId || (review as any).userId)}
+                      className={`flex items-center gap-2 transition-all p-1.5 -m-1.5 rounded-xl ${syncedIds.has(review.id) ? 'text-moss-400' : 'text-gray-600 hover:text-moss-400'}`}
+                    >
+                      <Heart size={18} className={syncedIds.has(review.id) ? 'fill-current' : ''} />
+                      <span className="text-[10px] font-black uppercase tracking-tighter">{review.sintonias}</span>
+                    </button>
+                    <button
                       id={review.id === 'tutorial-post' ? 'tutorial-post-comment-button' : undefined}
                       onClick={() => setActiveCommentsId(review.id)}
                       className="flex items-center gap-2 text-gray-600 hover:text-white transition-colors"
                     >
                       <MessageCircle size={18} />
-                      <span className="text-[10px] font-black uppercase tracking-tighter">
-                        {review.commentsCount || 0}
-                      </span>
+                      <span className="text-[10px] font-black uppercase tracking-tighter">{review.commentsCount || 0}</span>
                     </button>
-                  <button 
-                    id={review.id === 'tutorial-post' ? 'tutorial-post-save-button' : undefined}
-                    onClick={() => toggleSave(review.id)}
-                    className={`transition-all ${savedIds.has(review.id) ? 'text-moss-400' : 'text-gray-600 hover:text-white'}`}
-                  >
-                    <Pin size={18} className={savedIds.has(review.id) ? 'fill-current' : ''} />
-                  </button>
-                  <button 
-                    id={review.id === 'tutorial-post' ? 'tutorial-post-share-button' : undefined}
-                    onClick={() => {
-                      if (navigator.share) {
-                        navigator.share({
-                          title: review.title,
-                          text: `Confira esse relato no FeedBECK: ${review.title}`,
-                          url: window.location.href,
-                        }).catch(() => {});
-                      } else {
-                        navigator.clipboard.writeText(`Confira esse relato no FeedBECK: ${review.title} - ${window.location.href}`);
-                        alert('Link copiado para compartilhar!');
-                      }
-                    }}
-                    className="text-gray-600 hover:text-moss-400 transition-colors"
-                  >
-                    <Send size={18} />
-                  </button>
-                  {user && review.authorId !== user.uid && (
-                    <button 
-                      id={review.id === 'tutorial-post' ? 'tutorial-post-report-button' : undefined}
-                      onClick={() => setReportModal({ id: review.id, type: 'post', content: review.content, targetUserId: review.authorId })}
-                      className="text-gray-600 hover:text-red-500 transition-colors"
-                      title="Denunciar Post"
+                    <button
+                      id={review.id === 'tutorial-post' ? 'tutorial-post-save-button' : undefined}
+                      onClick={() => toggleSave(review.id)}
+                      className={`transition-all ${savedIds.has(review.id) ? 'text-moss-400' : 'text-gray-600 hover:text-white'}`}
                     >
-                      <Flag size={18} />
+                      <Pin size={18} className={savedIds.has(review.id) ? 'fill-current' : ''} />
                     </button>
-                  )}
+                    <button
+                      id={review.id === 'tutorial-post' ? 'tutorial-post-share-button' : undefined}
+                      onClick={() => {
+                        if (navigator.share) {
+                          navigator.share({ title: review.title, text: `Confira esse relato no FeedBECK: ${review.title}`, url: window.location.href }).catch(() => {});
+                        } else {
+                          navigator.clipboard.writeText(`Confira esse relato no FeedBECK: ${review.title} - ${window.location.href}`);
+                          alert('Link copiado para compartilhar!');
+                        }
+                      }}
+                      className="text-gray-600 hover:text-moss-400 transition-colors"
+                    >
+                      <Send size={18} />
+                    </button>
+                    {user && review.authorId !== user.uid && (
+                      <button
+                        id={review.id === 'tutorial-post' ? 'tutorial-post-report-button' : undefined}
+                        onClick={() => setReportModal({ id: review.id, type: 'post', content: review.content, targetUserId: review.authorId })}
+                        className="text-gray-600 hover:text-red-500 transition-colors"
+                        title="Denunciar Post"
+                      >
+                        <Flag size={18} />
+                      </button>
+                    )}
+                  </div>
+                  <div id={review.id === 'tutorial-post' ? 'tutorial-post-stars' : undefined} className="flex items-center gap-1">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} size={12} className={i < Math.floor(review.rating) ? 'fill-moss-400 text-moss-400' : 'text-gray-700'} />
+                    ))}
+                  </div>
                 </div>
-
-                <div id={review.id === 'tutorial-post' ? 'tutorial-post-stars' : undefined} className="flex items-center gap-1">
-                  {[...Array(5)].map((_, i) => (
-                    <Star 
-                      key={i} 
-                      size={12} 
-                      className={i < Math.floor(review.rating) ? 'fill-moss-400 text-moss-400' : 'text-gray-700'} 
-                    />
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          ))
+              </motion.div>
+            );
+          })
         ) : (
           <div className="text-center py-20">
-            <p className="text-gray-600 italic text-sm">Nenhum relato por aqui ainda...</p>
+            {!showTutorial && user && seenCount > 0 && !showSeenPosts ? (
+              <div className="flex flex-col items-center gap-4">
+                <p className="text-gray-600 italic text-sm">Você está em dia com o feed! 🌿</p>
+                <button
+                  onClick={() => setShowSeenPosts(true)}
+                  className="px-6 py-3 glass rounded-2xl border border-white/5 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-moss-400 transition-all"
+                >
+                  Ver {seenCount} post{seenCount > 1 ? 's' : ''} já visto{seenCount > 1 ? 's' : ''}
+                </button>
+              </div>
+            ) : (
+              <p className="text-gray-600 italic text-sm">Nenhum relato por aqui ainda...</p>
+            )}
           </div>
         )}
       </section>
 
-      {/* Delete Review Modal */}
+      {/* ── Delete Review Modal ─────────────────────────────────────────── */}
       <AnimatePresence>
         {isDeleting && (
           <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setIsDeleting(null)}
-              className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md"
-            />
+              className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md" />
             <div className="fixed inset-0 z-[310] flex items-center justify-center p-6 pointer-events-none">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="bg-[#0f0f0f] border border-white/10 p-8 rounded-[40px] max-w-sm w-full shadow-2xl pointer-events-auto"
-              >
+              <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="bg-[#0f0f0f] border border-white/10 p-8 rounded-[40px] max-w-sm w-full shadow-2xl pointer-events-auto">
                 <div className="bg-red-500/10 w-16 h-16 rounded-full flex items-center justify-center mb-6 mx-auto">
                   <Trash2 size={32} className="text-red-500" />
                 </div>
@@ -952,16 +867,12 @@ export default function Feed() {
                   Você está prestes a apagar este post. Tem certeza? Essa ação não pode ser desfeita.
                 </p>
                 <div className="flex flex-col gap-3">
-                  <button
-                    onClick={() => deleteReview(isDeleting)}
-                    className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs transition-all shadow-lg shadow-red-900/20"
-                  >
+                  <button onClick={() => deleteReview(isDeleting)}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs transition-all shadow-lg shadow-red-900/20">
                     Sim, excluir agora
                   </button>
-                  <button
-                    onClick={() => setIsDeleting(null)}
-                    className="w-full bg-white/5 hover:bg-white/10 text-gray-400 font-bold py-4 rounded-2xl uppercase tracking-widest text-xs transition-all"
-                  >
+                  <button onClick={() => setIsDeleting(null)}
+                    className="w-full bg-white/5 hover:bg-white/10 text-gray-400 font-bold py-4 rounded-2xl uppercase tracking-widest text-xs transition-all">
                     Cancelar
                   </button>
                 </div>
@@ -971,24 +882,16 @@ export default function Feed() {
         )}
       </AnimatePresence>
 
-      {/* Report Modal */}
+      {/* ── Report Modal ────────────────────────────────────────────────── */}
       <AnimatePresence>
         {reportModal && (
           <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => !reportLoading && setReportModal(null)}
-              className="fixed inset-0 z-[400] bg-black/80 backdrop-blur-md"
-            />
+              className="fixed inset-0 z-[400] bg-black/80 backdrop-blur-md" />
             <div className="fixed inset-0 z-[410] flex items-center justify-center p-6 pointer-events-none">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="bg-[#0f0f0f] border border-white/10 p-8 rounded-[40px] max-w-sm w-full shadow-2xl pointer-events-auto"
-              >
+              <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="bg-[#0f0f0f] border border-white/10 p-8 rounded-[40px] max-w-sm w-full shadow-2xl pointer-events-auto">
                 <div className="bg-red-500/10 w-16 h-16 rounded-full flex items-center justify-center mb-6 mx-auto">
                   <AlertTriangle size={32} className="text-red-500" />
                 </div>
@@ -998,25 +901,16 @@ export default function Feed() {
                 <p className="text-gray-400 text-center text-xs mb-6 italic">
                   Isso será revisado pela nossa moderação. Por favor, explique o motivo.
                 </p>
-                <textarea
-                  value={reportReason}
-                  onChange={(e) => setReportReason(e.target.value)}
+                <textarea value={reportReason} onChange={(e) => setReportReason(e.target.value)}
                   placeholder="Por que você está denunciando isso?"
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-white outline-none focus:border-moss-500 transition-all resize-none h-32 mb-6 placeholder:text-gray-600"
-                />
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-white outline-none focus:border-moss-500 transition-all resize-none h-32 mb-6 placeholder:text-gray-600" />
                 <div className="flex flex-col gap-3">
-                  <button
-                    onClick={handleReport}
-                    disabled={reportLoading || !reportReason.trim()}
-                    className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs transition-all disabled:opacity-50"
-                  >
+                  <button onClick={handleReport} disabled={reportLoading || !reportReason.trim()}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-xs transition-all disabled:opacity-50">
                     {reportLoading ? 'Enviando...' : 'Enviar Denúncia'}
                   </button>
-                  <button
-                    onClick={() => setReportModal(null)}
-                    disabled={reportLoading}
-                    className="w-full bg-white/5 hover:bg-white/10 text-gray-400 font-bold py-4 rounded-2xl uppercase tracking-widest text-xs transition-all"
-                  >
+                  <button onClick={() => setReportModal(null)} disabled={reportLoading}
+                    className="w-full bg-white/5 hover:bg-white/10 text-gray-400 font-bold py-4 rounded-2xl uppercase tracking-widest text-xs transition-all">
                     Cancelar
                   </button>
                 </div>
@@ -1026,7 +920,7 @@ export default function Feed() {
         )}
       </AnimatePresence>
 
-      {/* Lista de sugestões de menção — FIXED acima do teclado, fora do bottom sheet */}
+      {/* ── Mention suggestions ─────────────────────────────────────────── */}
       <AnimatePresence>
         {showMentionList && mentionSuggestions.length > 0 && activeCommentsId && (
           <motion.div
@@ -1039,16 +933,11 @@ export default function Feed() {
           >
             <div className="bg-[#131313] border border-moss-500/20 rounded-2xl overflow-y-auto shadow-2xl shadow-black/60 max-w-lg mx-auto divide-y divide-white/5" style={{ maxHeight: 180 }}>
               {mentionSuggestions.map((u, idx) => (
-                <motion.button
-                  key={u.uid}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.04 }}
+                <motion.button key={u.uid} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.04 }}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     const lastAt = newCommentText.lastIndexOf("@");
-                    const before = newCommentText.slice(0, lastAt);
-                    const newText = before + u.handle + " ";
+                    const newText = newCommentText.slice(0, lastAt) + u.handle + " ";
                     setNewCommentText(newText);
                     const editable = document.querySelector("[data-mention-input=\"true\"]") as HTMLElement;
                     if (editable) {
@@ -1063,12 +952,10 @@ export default function Feed() {
                     }
                     setShowMentionList(false);
                     setMentionSuggestions([]);
-                    setMentionQuery("");
                     try {
                       const key = "feedbeck_mention_history";
                       const existing = JSON.parse(localStorage.getItem(key) || "[]");
-                      const filtered = existing.filter((h: string) => h !== u.handle);
-                      localStorage.setItem(key, JSON.stringify([u.handle, ...filtered].slice(0, 10)));
+                      localStorage.setItem(key, JSON.stringify([u.handle, ...existing.filter((h: string) => h !== u.handle)].slice(0, 10)));
                     } catch {}
                   }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-moss-500/10 active:bg-moss-500/20 transition-all text-left group"
@@ -1091,25 +978,15 @@ export default function Feed() {
         )}
       </AnimatePresence>
 
-      {/* Comments Modal */}
+      {/* ── Comments Modal ──────────────────────────────────────────────── */}
       <AnimatePresence>
         {activeCommentsId && (
           <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => { setActiveCommentsId(null); setShowMentionList(false); setMentionSuggestions([]); }}
+              className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md" />
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => {
-                setActiveCommentsId(null);
-                setShowMentionList(false);
-                setMentionSuggestions([]);
-              }}
-              className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md"
-            />
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
+              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               style={{ maxHeight: visibleVH - 80 }}
               className="fixed bottom-[80px] left-0 right-0 z-[310] bg-[#0d0d0d] border-t border-white/10 rounded-t-[40px] flex flex-col shadow-2xl p-6 pb-4 max-w-lg mx-auto"
@@ -1121,14 +998,8 @@ export default function Feed() {
                     Relato de {reviews.find(r => r.id === activeCommentsId)?.userName}
                   </p>
                 </div>
-                <button
-                  onClick={() => {
-                    setActiveCommentsId(null);
-                    setShowMentionList(false);
-                    setMentionSuggestions([]);
-                  }}
-                  className="p-2 bg-white/5 rounded-full text-gray-400"
-                >
+                <button onClick={() => { setActiveCommentsId(null); setShowMentionList(false); setMentionSuggestions([]); }}
+                  className="p-2 bg-white/5 rounded-full text-gray-400">
                   <X size={20} />
                 </button>
               </div>
@@ -1143,13 +1014,7 @@ export default function Feed() {
                       const nameVal = liveProfile?.displayName || (comment as any).userName || handleVal.replace('@', '');
                       const avatarStylesVal = liveProfile?.avatarStyles || (comment as any).userAvatarStyles || (handleVal === profile?.handle ? profile?.avatarStyles : null);
                       return (
-                        <motion.div
-                          key={comment.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, scale: 0.95 }}
-                          className="flex gap-4"
-                        >
+                        <motion.div key={comment.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="flex gap-4">
                           <UserAvatar styles={avatarStylesVal} seed={handleVal} size="sm" />
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
@@ -1164,10 +1029,8 @@ export default function Feed() {
                                 </button>
                               )}
                               {user && commenterId !== user.uid && (
-                                <button
-                                  onClick={() => setReportModal({ id: comment.id, type: 'comment', content: comment.text, targetUserId: comment.authorId || comment.userId })}
-                                  className="text-gray-600 hover:text-red-500 transition-colors ml-1"
-                                >
+                                <button onClick={() => setReportModal({ id: comment.id, type: 'comment', content: comment.text, targetUserId: comment.authorId || (comment as any).userId })}
+                                  className="text-gray-600 hover:text-red-500 transition-colors ml-1">
                                   <Flag size={12} />
                                 </button>
                               )}
@@ -1181,15 +1044,13 @@ export default function Feed() {
                               {comment.text.split(/(@[a-zA-Z0-9_]+)/g).map((part, i) =>
                                 /^@[a-zA-Z0-9_]+$/.test(part)
                                   ? <Link key={i} to={`/profile/${part.slice(1)}`} onClick={() => setActiveCommentsId(null)}
-                                      className="text-moss-400 font-black not-italic hover:underline">{part}</Link>
+                                    className="text-moss-400 font-black not-italic hover:underline">{part}</Link>
                                   : part
                               )}
                             </p>
                             {user && (
-                              <button
-                                onClick={() => setReplyingTo({ commentId: comment.id, authorHandle: handleVal, authorId: commenterId, text: comment.text })}
-                                className="text-[10px] font-extrabold uppercase text-moss-500 hover:text-moss-400 cursor-pointer active:scale-95 transition-all mt-1"
-                              >
+                              <button onClick={() => setReplyingTo({ commentId: comment.id, authorHandle: handleVal, authorId: commenterId, text: comment.text })}
+                                className="text-[10px] font-extrabold uppercase text-moss-500 hover:text-moss-400 cursor-pointer active:scale-95 transition-all mt-1">
                                 Responder
                               </button>
                             )}
@@ -1215,14 +1076,12 @@ export default function Feed() {
                 </div>
               )}
 
-              {/* Input area */}
               <div ref={inputAreaRef} className="bg-white/5 p-4 rounded-[24px] border border-white/10 flex items-center gap-4 transition-all focus-within:border-moss-500/50">
                 <div className="shrink-0">
                   <UserAvatar styles={profile?.avatarStyles} seed={user?.uid} size="sm" rainbow={profile?.rainbowActive} />
                 </div>
                 <div
-                  contentEditable
-                  suppressContentEditableWarning
+                  contentEditable suppressContentEditableWarning
                   data-mention-input="true"
                   data-placeholder="Escreva sua brisa aqui..."
                   onInput={async (e) => {
@@ -1233,25 +1092,22 @@ export default function Feed() {
                     if (lastAt !== -1) {
                       const afterAt = rawText.slice(lastAt + 1);
                       if (/^[a-zA-Z0-9_]*$/.test(afterAt) && !afterAt.includes(' ')) {
-                        recalcMentionBottom();
                         setShowMentionList(true);
+                        recalcViewport();
                         try {
                           if (afterAt.length === 0) {
                             const histKey = 'feedbeck_mention_history';
                             const history: string[] = JSON.parse(localStorage.getItem(histKey) || '[]');
                             if (history.length > 0) {
-                              const q = query(collection(db, 'users'), where('handle', 'in', history.slice(0, 5)));
-                              const snap = await getDocs(q);
+                              const snap = await getDocs(query(collection(db, 'users'), where('handle', 'in', history.slice(0, 5))));
                               setMentionSuggestions(snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email));
                             } else {
-                              const q = query(collection(db, 'users'), where('handle', '>=', '@a'), where('handle', '<=', '@zzzzzz'));
-                              const snap = await getDocs(q);
+                              const snap = await getDocs(query(collection(db, 'users'), where('handle', '>=', '@a'), where('handle', '<=', '@zzzzzz')));
                               setMentionSuggestions(snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email).slice(0, 5));
                             }
                           } else {
                             const term = '@' + afterAt.toLowerCase();
-                            const q = query(collection(db, 'users'), where('handle', '>=', term), where('handle', '<=', term + 'zzzz'));
-                            const snap = await getDocs(q);
+                            const snap = await getDocs(query(collection(db, 'users'), where('handle', '>=', term), where('handle', '<=', term + 'zzzz')));
                             setMentionSuggestions(snap.docs.map(d => d.data()).filter((u: any) => u.uid !== user?.uid && u.email).slice(0, 5));
                           }
                         } catch { setMentionSuggestions([]); }
