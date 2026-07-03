@@ -800,9 +800,9 @@ export default function Feed() {
                     const nameVal = liveProfile?.displayName || (comment as any).userName || handleVal.replace('@', '');
                     const avatarStylesVal = liveProfile?.avatarStyles || (comment as any).userAvatarStyles || (handleVal === profile?.handle ? profile?.avatarStyles : null);
                     return (
-                      <motion.div key={comment.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="flex gap-4">
+                      <motion.div key={comment.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="flex gap-4 min-w-0">
                         <UserAvatar styles={avatarStylesVal} seed={handleVal} size="sm" />
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0 overflow-hidden">
                           <div className="flex items-center gap-2 mb-1">
                             <Link to={`/profile/${handleVal.replace('@', '')}`} onClick={() => setActiveCommentsId(null)}>
                               <span className="text-xs font-bold text-moss-400 uppercase tracking-tighter hover:underline">{nameVal}</span>
@@ -813,7 +813,7 @@ export default function Feed() {
                             {user && commenterId !== user.uid && (<button onClick={() => setReportModal({ id: comment.id, type: 'comment', content: comment.text, targetUserId: comment.authorId || (comment as any).userId })} className="text-gray-600 hover:text-red-500 transition-colors ml-1"><Flag size={12} /></button>)}
                           </div>
                           {comment.replyToHandle && (<p className="text-[10px] text-moss-500 font-bold mb-0.5">respondendo a <span className="underline">{comment.replyToHandle}</span></p>)}
-                          <p className="text-sm text-gray-300 leading-relaxed italic">
+                          <p className="text-sm text-gray-300 leading-relaxed italic break-words break-all overflow-hidden w-full">
                             {comment.text.split(/(@[a-zA-Z0-9_]+)/g).map((part, i) =>
                               /^@[a-zA-Z0-9_]+$/.test(part)
                                 ? <Link key={i} to={`/profile/${part.slice(1)}`} onClick={() => setActiveCommentsId(null)} className="text-moss-400 font-black not-italic hover:underline">{part}</Link>
