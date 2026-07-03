@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Star, Heart, MessageCircle, Send, X, Pin, Play, Pause, Music, Flag, AlertTriangle, Trash2 } from 'lucide-react';
+import { Star, Heart, MessageCircle, Send, X, Pin, Play, Pause, Music, Flag, AlertTriangle, Trash2, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -21,7 +21,9 @@ import {
   increment,
   deleteDoc,
   setDoc,
-  getDocs
+  getDoc,
+  getDocs,
+  limit
 } from 'firebase/firestore';
 
 import UserAvatar from '../components/UserAvatar';
@@ -93,16 +95,22 @@ const CategoryBadge = ({ category }: { category: Review['category'] }) => {
   );
 };
 
+// Quantos posts carregar inicialmente / por página — evita travar o app com feed gigante
+const FEED_PAGE_SIZE = 30;
+
 export default function Feed() {
   const { user, profile, isAdmin, followingIds } = useAuth();
   const [activeFilter, setActiveFilter] = useState<'todos' | 'larica' | 'filme' | 'brisas' | 'sons'>('todos');
   const [syncedIds, setSyncedIds] = useState<Set<string>>(new Set());
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
-  // ── Seen IDs: apenas na sessão atual (como Instagram) ────────────────────
-  // Quando o usuário fecha/abre o app, o feed volta do zero reordenado.
-  const [sessionSeenIds, setSessionSeenIds] = useState<Set<string>>(new Set());
-  const [showCaughtUp, setShowCaughtUp] = useState(false);
+  // ── Marco de "última visita" — salvo no Firestore (users/{uid}.lastFeedVisitAt) ──
+  // Tudo criado DEPOIS desse timestamp = novo. Tudo criado ANTES = já visto.
+  const [lastVisitMark, setLastVisitMark] = useState<Date | null>(null);
+  const [markLoaded, setMarkLoaded] = useState(false);
+
+  // Quantos posts exibir no momento (paginação local, sem re-fetch pesado)
+  const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
 
   const [activeCommentsId, setActiveCommentsId] = useState<string | null>(null);
   const [commenterProfiles, setCommenterProfiles] = useState<Record<string, any>>({});
@@ -126,46 +134,46 @@ export default function Feed() {
   const [visibleVH, setVisibleVH] = useState(window.innerHeight);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // ── IntersectionObserver — marca como visto na sessão ao scrollar ────────
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
-
-  const markSeenInSession = useCallback((reviewId: string) => {
-    if (reviewId === 'tutorial-post') return;
-    setSessionSeenIds(prev => {
-      if (prev.has(reviewId)) return prev;
-      const next = new Set(prev);
-      next.add(reviewId);
-      return next;
-    });
-  }, []);
-
+  // ── 1. Carregar e gravar o marco de última visita ────────────────────────
+  // Ao montar o Feed: lê users/{uid}.lastFeedVisitAt (define onde fica a linha
+  // "você viu até aqui"), e em seguida ATUALIZA esse campo para agora — assim
+  // a próxima visita usa o timestamp desta sessão.
   useEffect(() => {
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const id = (entry.target as HTMLElement).dataset.reviewId;
-            if (id) markSeenInSession(id);
-          }
-        });
-      },
-      { threshold: 0.5 } // 50% visível = marcado como visto
-    );
-    return () => { observerRef.current?.disconnect(); };
-  }, [markSeenInSession]);
-
-  const setCardRef = useCallback((el: HTMLElement | null, reviewId: string) => {
-    if (!observerRef.current) return;
-    const existing = cardRefs.current.get(reviewId);
-    if (existing) observerRef.current.unobserve(existing);
-    if (el) {
-      cardRefs.current.set(reviewId, el);
-      observerRef.current.observe(el);
-    } else {
-      cardRefs.current.delete(reviewId);
+    if (!user) {
+      setLastVisitMark(null);
+      setMarkLoaded(true);
+      return;
     }
-  }, []);
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        const snap = await getDoc(userRef);
+        const data = snap.exists() ? snap.data() : null;
+        const previousMark = data?.lastFeedVisitAt
+          ? (data.lastFeedVisitAt.toDate ? data.lastFeedVisitAt.toDate() : new Date(data.lastFeedVisitAt))
+          : null;
+
+        if (!cancelled) {
+          setLastVisitMark(previousMark);
+          setMarkLoaded(true);
+        }
+
+        // Atualiza o marco para "agora" — só vale para a PRÓXIMA visita
+        await updateDoc(userRef, { lastFeedVisitAt: serverTimestamp() }).catch(() => {});
+      } catch (_) {
+        if (!cancelled) {
+          setLastVisitMark(null);
+          setMarkLoaded(true);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
 
   // ── Viewport ──────────────────────────────────────────────────────────────
   const recalcViewport = () => {
@@ -187,7 +195,7 @@ export default function Feed() {
     };
   }, []);
 
-  // ── Audio ──────────────────────────────────────────────────────────────────
+  // ── Audio ─────────────────────────────────────────────────────────────────
   const togglePlayback = (id: string, url: string) => {
     if (playingId === id) {
       audioRef.current?.pause();
@@ -229,27 +237,63 @@ export default function Feed() {
 
   const ME_HANDLE = profile?.handle || '@anonimo';
 
-  // ── Reviews ────────────────────────────────────────────────────────────────
+  // ── 2. Reviews — limitado para não travar o app com feeds gigantes ───────
   useEffect(() => {
     if (!user) {
-      const q = query(collection(db, 'reviews'), where('isPrivate', '==', false), orderBy('createdAt', 'desc'));
+      const q = query(
+        collection(db, 'reviews'),
+        where('isPrivate', '==', false),
+        orderBy('createdAt', 'desc'),
+        limit(FEED_PAGE_SIZE * 3) // margem para filtros locais (categoria/anônimo)
+      );
       return onSnapshot(q, (snap) => {
         setReviews(snap.docs.map(d => {
           const data = d.data();
-          return { id: d.id, ...data, userName: data.authorName || data.userName || 'Usuário', userHandle: data.authorHandle || data.userHandle || '@anonimo', authorAvatarStyles: data.authorAvatarStyles || data.userAvatarStyles, authorRainbowActive: data.authorRainbowActive, timestamp: data.createdAt?.toDate() || new Date() } as Review;
+          return {
+            id: d.id, ...data,
+            userName: data.authorName || data.userName || 'Usuário',
+            userHandle: data.authorHandle || data.userHandle || '@anonimo',
+            authorAvatarStyles: data.authorAvatarStyles || data.userAvatarStyles,
+            authorRainbowActive: data.authorRainbowActive,
+            timestamp: data.createdAt?.toDate() || new Date()
+          } as Review;
         }).filter(r => r.userHandle !== '@anonimo'));
       });
     }
 
     const limitedFollowingIds = followingIds.slice(0, 28);
     const q = limitedFollowingIds.length > 0
-      ? query(collection(db, 'reviews'), or(where('isPrivate', '==', false), where('authorId', '==', user.uid), where('authorId', 'in', limitedFollowingIds)), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'reviews'), or(where('isPrivate', '==', false), where('authorId', '==', user.uid)), orderBy('createdAt', 'desc'));
+      ? query(
+          collection(db, 'reviews'),
+          or(
+            where('isPrivate', '==', false),
+            where('authorId', '==', user.uid),
+            where('authorId', 'in', limitedFollowingIds)
+          ),
+          orderBy('createdAt', 'desc'),
+          limit(FEED_PAGE_SIZE * 3)
+        )
+      : query(
+          collection(db, 'reviews'),
+          or(
+            where('isPrivate', '==', false),
+            where('authorId', '==', user.uid)
+          ),
+          orderBy('createdAt', 'desc'),
+          limit(FEED_PAGE_SIZE * 3)
+        );
 
     return onSnapshot(q, (snap) => {
       setReviews(snap.docs.map(d => {
         const data = d.data();
-        return { id: d.id, ...data, userName: data.authorName || data.userName || 'Usuário', userHandle: data.authorHandle || data.userHandle || '@anonimo', authorAvatarStyles: data.authorAvatarStyles || data.userAvatarStyles, authorRainbowActive: data.authorRainbowActive, timestamp: data.createdAt?.toDate() || new Date() } as Review;
+        return {
+          id: d.id, ...data,
+          userName: data.authorName || data.userName || 'Usuário',
+          userHandle: data.authorHandle || data.userHandle || '@anonimo',
+          authorAvatarStyles: data.authorAvatarStyles || data.userAvatarStyles,
+          authorRainbowActive: data.authorRainbowActive,
+          timestamp: data.createdAt?.toDate() || new Date()
+        } as Review;
       }).filter(r => r.userHandle !== '@anonimo' || r.authorId === user.uid));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'reviews'));
   }, [user, followingIds]);
@@ -399,47 +443,26 @@ export default function Feed() {
     images: ['https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&q=80&w=800']
   } : null;
 
-  // ── Smart feed estilo Instagram ───────────────────────────────────────────
-  // Lógica:
-  // 1. Separa não vistos (nessa sessão) e vistos
-  // 2. Não vistos: seguindo primeiro, depois outros
-  // 3. Quando não vistos acabam → mostra banner "você está em dia"
-  //    e exibe os vistos abaixo, com separador visual
-  // 4. Na próxima sessão tudo volta do zero
-  const buildFeed = () => {
-    if (showTutorial) return { unseen: tutorialPost ? [tutorialPost] : [], seen: [] };
+  // ── 3. Feed final: novos acima, linha "você viu até aqui", antigos abaixo ──
+  const filteredReviews = showTutorial
+    ? (tutorialPost ? [tutorialPost] : [])
+    : (activeFilter === 'todos' ? reviews : reviews.filter(r => r.category === activeFilter));
 
-    const filtered = activeFilter === 'todos' ? reviews : reviews.filter(r => r.category === activeFilter);
+  // Posts novos = criados DEPOIS do último marco de visita salvo
+  const newPosts = (!showTutorial && lastVisitMark)
+    ? filteredReviews.filter(r => r.timestamp > lastVisitMark)
+    : filteredReviews;
+  const oldPosts = (!showTutorial && lastVisitMark)
+    ? filteredReviews.filter(r => r.timestamp <= lastVisitMark)
+    : [];
 
-    if (!user) return { unseen: filtered, seen: [] };
+  // Paginação local — corta a lista total no visibleCount para não travar o app
+  const totalOrdered = [...newPosts, ...oldPosts];
+  const paginated = totalOrdered.slice(0, visibleCount);
+  const hasMore = totalOrdered.length > visibleCount;
 
-    const unseen = filtered.filter(r => !sessionSeenIds.has(r.id));
-    const seen = filtered.filter(r => sessionSeenIds.has(r.id));
-
-    // Não vistos: seguindo primeiro
-    const unseenFollowing = unseen.filter(r => followingIds.includes(r.authorId));
-    const unseenOthers = unseen.filter(r => !followingIds.includes(r.authorId));
-
-    // Vistos: seguindo primeiro também
-    const seenFollowing = seen.filter(r => followingIds.includes(r.authorId));
-    const seenOthers = seen.filter(r => !followingIds.includes(r.authorId));
-
-    return {
-      unseen: [...unseenFollowing, ...unseenOthers],
-      seen: [...seenFollowing, ...seenOthers]
-    };
-  };
-
-  const { unseen: unseenReviews, seen: seenReviews } = buildFeed();
-
-  // Quando todos os não vistos acabam → mostra banner automaticamente
-  useEffect(() => {
-    if (!showTutorial && user && unseenReviews.length === 0 && seenReviews.length > 0) {
-      setShowCaughtUp(true);
-    } else {
-      setShowCaughtUp(false);
-    }
-  }, [unseenReviews.length, seenReviews.length, showTutorial, user]);
+  // Índice onde a linha separadora deve aparecer dentro da lista paginada
+  const dividerIndex = newPosts.length > 0 && newPosts.length < paginated.length ? newPosts.length : -1;
 
   const notificationCount = unreadRepliesCount;
   const hasNotifications = notificationCount > 0;
@@ -451,9 +474,6 @@ export default function Feed() {
     { id: 'brisas', label: 'Brisa' },
     { id: 'sons', label: 'Sons' }
   ];
-
-  // Posts que aparecem na tela = não vistos + (se caughtUp) vistos abaixo
-  const displayReviews = showCaughtUp ? [...unseenReviews, ...seenReviews] : unseenReviews;
 
   return (
     <div className="p-6 pt-12 pb-24">
@@ -483,7 +503,7 @@ export default function Feed() {
       {/* Filter Buttons */}
       <div className="flex flex-wrap gap-2 mb-8">
         {filterOptions.map((opt) => (
-          <button key={opt.id} onClick={() => setActiveFilter(opt.id as any)}
+          <button key={opt.id} onClick={() => { setActiveFilter(opt.id as any); setVisibleCount(FEED_PAGE_SIZE); }}
             className={`px-5 py-2 rounded-full text-[10px] uppercase tracking-widest font-bold transition-all whitespace-nowrap ${
               activeFilter === opt.id
                 ? opt.id === 'larica' ? 'bg-orange-500 text-white shadow-lg shadow-orange-900/40'
@@ -500,43 +520,42 @@ export default function Feed() {
       </div>
 
       <section className="space-y-6">
-        {displayReviews.length === 0 && !showTutorial ? (
+        {/* Aguardando o marco de última visita carregar (evita flash de ordenação errada) */}
+        {!markLoaded ? (
+          <div className="flex justify-center py-20">
+            <div className="w-8 h-8 border-4 border-moss-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : paginated.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-gray-600 italic text-sm">Nenhum relato por aqui ainda...</p>
           </div>
         ) : (
-          displayReviews.map((review, index) => {
-            const isFirstSeen = showCaughtUp && index === unseenReviews.length;
-            return (
+          <>
+            {paginated.map((review, index) => (
               <div key={review.id}>
-                {/* Separador "Você está em dia" — aparece antes do primeiro post já visto */}
-                {isFirstSeen && (
+                {/* Linha "você viu até aqui" — entre os novos e os antigos */}
+                {index === dividerIndex && (
                   <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex flex-col items-center gap-3 py-6 mb-2"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex items-center gap-3 py-6 mb-2"
                   >
-                    <div className="w-12 h-12 bg-moss-500/10 rounded-full flex items-center justify-center text-2xl border border-moss-500/20">
-                      🌿
-                    </div>
-                    <p className="text-white font-black uppercase tracking-widest text-xs">Você está em dia!</p>
-                    <p className="text-gray-600 text-[10px] italic text-center max-w-[200px]">
-                      Abaixo estão relatos que você já viu nesta sessão
-                    </p>
-                    <div className="w-full h-[1px] bg-white/5 mt-2" />
+                    <div className="flex-1 h-[1px] bg-white/10" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-600 whitespace-nowrap px-2">
+                      Você viu até aqui
+                    </span>
+                    <div className="flex-1 h-[1px] bg-white/10" />
                   </motion.div>
                 )}
 
                 <motion.div
                   layout
                   initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: isFirstSeen ? 0.6 : 1, y: 0 }}
+                  animate={{ opacity: 1, y: 0 }}
                   id={review.id === 'tutorial-post' ? 'tutorial-post-card' : undefined}
-                  data-review-id={review.id}
-                  ref={(el) => setCardRef(el, review.id)}
                   className={`glass-card p-6 shadow-xl shadow-black/20 overflow-hidden relative border-t-4 transition-all ${
                     review.category === 'sons' ? 'border-indigo-500/50 shadow-indigo-900/10' : 'border-transparent'
-                  } ${sessionSeenIds.has(review.id) && showCaughtUp ? 'opacity-60' : ''}`}
+                  } ${dividerIndex !== -1 && index >= dividerIndex ? 'opacity-70' : ''}`}
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div id={review.id === 'tutorial-post' ? 'tutorial-post-author' : undefined} className="flex items-center gap-3">
@@ -667,8 +686,19 @@ export default function Feed() {
                   </div>
                 </motion.div>
               </div>
-            );
-          })
+            ))}
+
+            {/* Botão "carregar mais" — paginação local, evita travar puxando tudo de uma vez */}
+            {hasMore && (
+              <button
+                onClick={() => setVisibleCount(prev => prev + FEED_PAGE_SIZE)}
+                className="w-full py-4 glass rounded-2xl border border-white/5 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-moss-400 hover:border-moss-500/20 transition-all flex items-center justify-center gap-2"
+              >
+                <ChevronDown size={14} />
+                Carregar mais relatos
+              </button>
+            )}
+          </>
         )}
       </section>
 
